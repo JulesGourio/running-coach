@@ -26,6 +26,31 @@ for x in al.alerts(db, s):
     box(f"**{x['title']}** — {x['detail']}  \n{x['advice']}", icon={"rouge": ":material/error:", "orange": ":material/warning:",
                                                                    "info": ":material/info:"}[x["level"]])
 
+# ---- weekly report (generated automatically for the week that ended last Sunday) --------------------------
+from coach import report as rpt  # noqa: E402
+
+_last = rpt.ensure_last_week(db, s)
+_all = rpt.reports(db)
+with st.expander(f"Bilan de la semaine du {fdate(_last['week'])} au {fdate(_last['end'])}", icon=":material/summarize:",
+                 expanded=date.today().weekday() == 0):
+    _wk = st.selectbox("Semaine", sorted(_all, reverse=True), format_func=lambda w: f"Semaine du {fdate(w)}", key="rpt-week",
+                       label_visibility="collapsed")
+    _r = _all[_wk]
+    for line in _r["summary"]:
+        st.markdown(f"- {line}")
+    st.markdown("**Ajustements proposés**")
+    for p_ in _r["proposals"]:
+        st.markdown(f"- {p_}")
+    if _r.get("alerts"):
+        st.caption("Alertes en fin de semaine : " + " · ".join(x["title"] for x in _r["alerts"]))
+    st.dataframe(pd.DataFrame([{"Jour": fdate(d["date"]), "Prévu": d["planned"] or "—",
+                                "Réalisé": " + ".join(x["headline"] for x in d["done"]) or ("—" if not d["planned"] or d["planned"] == "Repos" else "pas faite"),
+                                "Km": sum((x["km"] or 0) for x in d["done"]) or None} for d in _r["days"]]),
+                 hide_index=True, width="stretch")
+    if st.button("Recalculer ce bilan", key="rpt-regen", icon=":material/refresh:"):
+        rpt.regenerate(db, s, date.fromisoformat(_wk))
+        st.rerun()
+
 # ---- Where you stand vs the goal -------------------------------------------------------------------
 pr = service.progress(db, s)
 service.goal_track(db, s, pr)  # records this week's point of the A/B tracking

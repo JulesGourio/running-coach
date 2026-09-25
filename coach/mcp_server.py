@@ -81,6 +81,18 @@ def plan(jours_passes: int = 7, jours_a_venir: int = 14) -> dict:
 
 
 @server.tool()
+def bilan_semaine(lundi: str | None = None) -> dict:
+    """Bilan d'une semaine (lundi au format AAAA-MM-JJ ; par défaut la dernière semaine complète) : réalisé contre
+    prévu jour par jour, séances clés, charge, sommeil, FC de repos et VFC comparées aux 4 semaines d'avant,
+    évolution du 10 km estimé, alertes et ajustements proposés."""
+    from datetime import date as _d
+
+    from coach import report
+    s, db = _ctx()
+    return report.build(db, s, _d.fromisoformat(lundi)) if lundi else report.ensure_last_week(db, s)
+
+
+@server.tool()
 def alertes() -> dict:
     """Alertes du jour : sommeil court avant une séance dure, FC de repos ou VFC anormales, charge qui dérape, dette de
     sommeil, hausse brutale du kilométrage, séances de qualité manquées. Chacune avec un conseil."""
