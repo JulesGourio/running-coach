@@ -1,0 +1,8 @@
+# Personal training data, COROS tokens and secrets never go to git.
+data/
+data-demo/
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

@@ -19,6 +19,11 @@ Données : connecteur COROS (`mcp__COROS__*`). Charge ces outils avec ToolSearch
   - `querySleepHrv`, `querySleepOverview` et `queryRestingHeartRate` sur 7 jours
   - `queryTrainingPlanLibrary` pour le plan en cours (ligne `execution`, `editable`), puis `queryTrainingPlanDetails` sur la semaine écoulée et sur les 14 prochains jours.
 
+Si les outils du serveur local `running-coach` sont disponibles (session Claude Code dans VS Code) :
+appelle d'abord `synchroniser`, puis `resume` et `seances` (7 jours). Ils donnent les métriques calculées
+sur les fichiers FIT : notes, répétitions, découplage, zones, modèle de charge, projection. Pour chaque
+séance sans verdict, lis `analyse_seance` et enregistre un verdict avec `enregistrer_verdict`.
+
 ## 2. Analyser
 
 - Semaine écoulée : séances prévues contre séances réalisées (distance, allure, FC). Séances manquées ou modifiées.

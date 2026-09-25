@@ -33,13 +33,32 @@ Le Plan ID du bloc en cours ne doit jamais être montré à l'utilisateur (contr
 - Les allures dans les séances sont en secondes/km (ex: 4:00/km = 240). Toujours vérifier
   qu'une allure absolue reste dans les bornes 120–1499 s/km avant d'écrire une séance.
 
-## Dashboard
+## Appli locale (source principale d'analyse)
 
-Le dashboard « Carnet de course » (https://claude.ai/artifact/Ceh6AwSUkZkGPjL8kFSdT2, source
-`dashboard/index.html`) lit COROS en direct et garde les notes du coach dans sa base de données
-(outil `ArtifactData`). Pour un check-in ou un bilan, suivre `.claude/skills/checkin/SKILL.md`
-et écrire le résultat dans le dashboard. Les réponses COROS sont du texte : si leur format
-change, adapter les fonctions `parse*` de la page puis republier avec l'URL ci-dessus.
+Package Python `coach/` (voir README). En local, le serveur MCP `running-coach` (déclaré dans `.mcp.json`)
+expose les analyses calculées à partir des fichiers FIT : `resume`, `seances`, `analyse_seance`,
+`progression`, `charge`, `plan`, `enregistrer_verdict`, `synchroniser`.
+
+Pour juger une séance :
+1. Lis `analyse_seance` (métriques, répétitions contre la cible, constats automatiques, note sur 10).
+2. Rédige un verdict court et précis en français : ce qui est réussi, ce qui ne l'est pas, avec les chiffres
+   (allures en min:s/km, FC, découplage, part en zones faciles), puis une consigne concrète pour la
+   prochaine séance du même type. Tu peux corriger la note automatique si le contexte le justifie
+   (météo, dénivelé, séance adaptée volontairement).
+3. Enregistre-le avec `enregistrer_verdict` : il s'affiche dans le dashboard Streamlit.
+
+Pour un bilan de semaine, croise `resume`, `charge` et `plan`. Les modifications du plan passent toujours
+par le connecteur COROS de Claude, jamais par l'appli locale.
+
+Code : les réponses COROS du serveur officiel sont du texte, lu par `coach/sources/parsers.py`.
+Si COROS change son format, adapte ces fonctions et `tests/test_parsers.py`. Lance `uv run pytest`
+avant de committer.
+
+## Page claude.ai (vue mobile)
+
+La page « Carnet de course » (https://claude.ai/artifact/Ceh6AwSUkZkGPjL8kFSdT2, source
+`dashboard/index.html`) lit COROS en direct et garde les notes du check-in du lundi dans sa base
+(outil `ArtifactData`). Pour le check-in, suivre `.claude/skills/checkin/SKILL.md`.
 
 ## Repères de forme (mis à jour au fil des check-ins)
 

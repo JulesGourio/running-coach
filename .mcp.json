@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "running-coach": {
+      "command": "uv",
+      "args": ["run", "coach-mcp"]
+    }
+  }
+}
