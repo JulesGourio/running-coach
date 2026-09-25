@@ -19,6 +19,13 @@ if not db.activities():
             "ou `uv run coach import-fit <dossier>` pour importer des fichiers FIT.")
     st.stop()
 
+from coach import alerts as al  # noqa: E402
+
+for x in al.alerts(db, s):
+    box = {"rouge": st.error, "orange": st.warning, "info": st.info}[x["level"]]
+    box(f"**{x['title']}** — {x['detail']}  \n{x['advice']}", icon={"rouge": ":material/error:", "orange": ":material/warning:",
+                                                                   "info": ":material/info:"}[x["level"]])
+
 # ---- Where you stand vs the goal -------------------------------------------------------------------
 pr = service.progress(db, s)
 est, proj, probs, vma = pr["estimate"], pr["projection"], pr["probabilities"], pr["vma"]
@@ -112,24 +119,21 @@ with st.container(horizontal=True):
 st.caption("Forme, fatigue et fraîcheur comptent tous tes sports : la course (détaillée) et les autres activités "
            "(randonnée, vélo…, estimées d'après la FC et la durée). Le ratio de charge vient de COROS : c'est le garde-fou.")
 
-# ---- Alerts ----------------------------------------------------------------------------------------
+# ---- Training notes (from the analyses) ----------------------------------------------------------------
 recent = service.sessions(db, 14)
 flags = Counter(f for x in recent for f in x["flags"])
-missed = [p for p in service.plan_view(db, s, back=14, ahead=0) if p["status"] == "manquée"]
-alerts = []
+notes = []
 if flags["trop_intense"] or flags["trop_rapide"]:
     n = len([x for x in recent if {"trop_intense", "trop_rapide"} & set(x["flags"])])
-    alerts.append(f"{n} footing{'s' if n > 1 else ''} couru{'s' if n > 1 else ''} trop fort sur 14 jours : garde l'endurance en Z2.")
+    notes.append(f"{n} footing{'s' if n > 1 else ''} couru{'s' if n > 1 else ''} trop fort sur 14 jours : garde l'endurance en Z2.")
 if flags["decouplage"]:
-    alerts.append(f"Découplage cardiaque au-delà de 5 % sur {flags['decouplage']} sortie(s) : endurance à consolider.")
+    notes.append(f"Dérive cardiaque au-delà de 5 % sur {flags['decouplage']} sortie(s) : endurance à consolider.")
 if flags["reps_trop_rapides"]:
-    alerts.append(f"Répétitions plus rapides que prévu sur {flags['reps_trop_rapides']} séance(s).")
-if missed:
-    alerts.append(f"{len(missed)} séance{'s' if len(missed) > 1 else ''} du plan manquée{'s' if len(missed) > 1 else ''} sur 14 jours.")
-if alerts:
-    st.subheader("À surveiller", divider="orange")
-    for msg in alerts:
-        st.warning(msg, icon=":material/warning:")
+    notes.append(f"Répétitions plus rapides que prévu sur {flags['reps_trop_rapides']} séance(s).")
+if notes:
+    with st.expander(f"Remarques sur tes séances ({len(notes)})", icon=":material/info:"):
+        for msg in notes:
+            st.markdown(f"- {msg}")
 
 # ---- Recent sessions -------------------------------------------------------------------------------
 st.subheader("Dernières séances", divider="gray")

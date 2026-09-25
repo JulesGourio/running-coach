@@ -81,6 +81,15 @@ def plan(jours_passes: int = 7, jours_a_venir: int = 14) -> dict:
 
 
 @server.tool()
+def alertes() -> dict:
+    """Alertes du jour : sommeil court avant une séance dure, FC de repos ou VFC anormales, charge qui dérape, dette de
+    sommeil, hausse brutale du kilométrage, séances de qualité manquées. Chacune avec un conseil."""
+    from coach.alerts import alerts
+    s, db = _ctx()
+    return {"alertes": alerts(db, s)}
+
+
+@server.tool()
 def modifications_plan(nombre: int = 20) -> dict:
     """Historique des modifications du plan envoyées sur COROS depuis l'appli (jour, avant, après, raison, statut)."""
     from coach.plan_edit import describe
