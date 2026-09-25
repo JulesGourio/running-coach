@@ -60,6 +60,12 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+CREATE TABLE IF NOT EXISTS sleep (
+    date TEXT PRIMARY KEY,
+    score REAL, total_min REAL, main_min REAL, main_period_min REAL,
+    deep_pct REAL, light_pct REAL, rem_pct REAL, awake_pct REAL, awake_min REAL, awake_count REAL,
+    bedtime TEXT, waketime TEXT, naps_min REAL, naps_json TEXT
+);
 CREATE TABLE IF NOT EXISTS plan_changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at TEXT,
@@ -218,6 +224,22 @@ class DB:
                  "courses": json.loads(r["courses_json"] or "[]")} for r in rows]
 
     # ---- meta ----
+    SLEEP_COLS = ["score", "total_min", "main_min", "main_period_min", "deep_pct", "light_pct", "rem_pct", "awake_pct",
+                  "awake_min", "awake_count", "bedtime", "waketime", "naps_min"]
+
+    def upsert_sleep(self, row: dict) -> None:
+        cols = ["date", *self.SLEEP_COLS, "naps_json"]
+        vals = [row["date"], *[row.get(k) for k in self.SLEEP_COLS], json.dumps(row.get("naps") or [])]
+        with self.conn() as c:
+            c.execute(f"INSERT INTO sleep ({','.join(cols)}) VALUES ({','.join('?' * len(cols))}) ON CONFLICT(date) DO UPDATE SET "
+                      + ", ".join(f"{k}=excluded.{k}" for k in cols[1:]), vals)
+
+    def sleep(self, since: str | None = None) -> list[dict]:
+        with self.conn() as c:
+            q = "SELECT * FROM sleep" + (" WHERE date>=?" if since else "") + " ORDER BY date"
+            rows = c.execute(q, [since] if since else []).fetchall()
+        return [{**dict(r), "naps": json.loads(r["naps_json"] or "[]")} for r in rows]
+
     def add_plan_change(self, change: dict, status: str, message: str = "") -> None:
         with self.conn() as c:
             c.execute("INSERT INTO plan_changes (created_at, date, day_no, reason, before_json, after_json, status, message) "

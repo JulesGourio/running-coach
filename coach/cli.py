@@ -42,6 +42,16 @@ def cmd_probe(_: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_history(ns: argparse.Namespace) -> None:
+    from coach.sync import sync_history
+    s, db = _db()
+    try:
+        asyncio.run(sync_history(s, db, days=ns.days))
+    except Exception as e:  # noqa: BLE001
+        print(f"Historique COROS impossible : {describe(e)}")
+        sys.exit(1)
+
+
 def cmd_sync(ns: argparse.Namespace) -> None:
     from coach.sync import analyze, sync_mcp, sync_web
     s, db = _db()
@@ -118,6 +128,9 @@ def main() -> None:
     sp.add_argument("--max-fit", type=int, default=15, help="Nombre maximum de fichiers FIT à télécharger")
     sp.add_argument("--source", choices=["auto", "mcp", "web"], default="auto")
     sp.set_defaults(fn=cmd_sync)
+    hp = sub.add_parser("history", help="Récupère l'historique long (séances résumées et sommeil, sans fichiers FIT)")
+    hp.add_argument("--days", type=int, default=365)
+    hp.set_defaults(fn=cmd_history)
     ip = sub.add_parser("import-fit", help="Importe des fichiers .fit depuis un dossier")
     ip.add_argument("folder")
     ip.set_defaults(fn=cmd_import)

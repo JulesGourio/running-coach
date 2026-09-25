@@ -144,3 +144,51 @@ def test_plan():
     assert [x["day_no"] for x in d["days"]] == [7, 8, 9]
     assert d["days"][0]["rest"] and d["days"][1]["courses"][0]["json"]["courseName"] == "VO2max 6x400m"
     assert not p.is_done(d["days"][1]["courses"][0]["status"]) and p.is_done(d["days"][2]["courses"][0]["status"])
+
+
+SLEEP_FULL = """Sleep Overview
+========================
+Note: each record below is dated by its wake-up day.
+
+2026-09-24
+Sleep Score: 95
+Daily Sleep: 8h 48min (incl. naps)
+Main Sleep (asleep): 7h 13min
+Main Sleep Period (incl. awake): 7h 26min
+Sleep metrics scope: daily
+Deep Sleep Ratio: 17%
+Light Sleep Ratio: 56%
+REM Ratio: 24%
+Awake Ratio: 3%
+Awake Time: 13 min
+Awake Count (>5 min): 0
+Main Sleep Window: 2026-09-24 01:42 - 2026-09-24 09:08
+Naps Total (asleep): 1h 35min
+Naps Period (incl. awake): 1h 55min
+Nap Window: 2026-09-24 17:25 - 2026-09-24 19:20
+
+2026-09-25
+Sleep Score: 72
+Daily Sleep: 6h 9min (incl. naps)
+Main Sleep (asleep): 5h 28min
+Main Sleep Period (incl. awake): 5h 34min
+Deep Sleep Ratio: 28%
+Light Sleep Ratio: 54%
+REM Ratio: 16%
+Awake Ratio: 2%
+Awake Time: 6 min
+Awake Count (>5 min): 0
+Main Sleep Window: 2026-09-25 03:21 - 2026-09-25 08:55
+
+2026-09-26
+Sleep detail for this day is not available yet."""
+
+
+def test_parse_sleep_full():
+    rows = p.parse_sleep_full(SLEEP_FULL)
+    assert [r["date"] for r in rows] == ["2026-09-24", "2026-09-25"]
+    a, b = rows
+    assert (a["total_min"], a["main_min"], a["naps_min"]) == (528, 433, 95)
+    assert (a["deep_pct"], a["rem_pct"], a["awake_min"]) == (17, 24, 13)
+    assert a["bedtime"] == "2026-09-24 01:42" and a["naps"] == [{"start": "2026-09-24 17:25", "end": "2026-09-24 19:20"}]
+    assert b["naps_min"] == 0 and b["naps"] == [] and b["main_min"] == 328

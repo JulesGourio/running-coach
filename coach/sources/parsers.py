@@ -147,6 +147,43 @@ def parse_plan_details(t: str) -> dict:
     return {"phases": phases, "days": days}
 
 
+def minutes(txt: str | None) -> float | None:
+    """'8h 48min' / '41 min' / '7h' -> minutes."""
+    if not txt:
+        return None
+    h = re.search(r"(\d+)\s*h", txt)
+    m = re.search(r"(\d+)\s*min", txt)
+    if not h and not m:
+        return None
+    return (int(h.group(1)) * 60 if h else 0) + (int(m.group(1)) if m else 0)
+
+
+def parse_sleep_full(t: str) -> list[dict]:
+    """Every field of querySleepOverview, one row per wake-up date (naps included, with their windows)."""
+    out = []
+    for b in re.split(r"\n(?=\d{4}-\d{2}-\d{2}\n)", t):
+        d = re.match(r"(\d{4}-\d{2}-\d{2})\nSleep Score:\s*(\d+)", b)
+        if not d or int(d.group(2)) == 0:
+            continue
+        pct = lambda k: float(v) if (v := _g(rf"{k}:\s*(\d+)\s*%", b)) else None  # noqa: E731
+        win = re.search(r"Main Sleep Window:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*-\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})", b)
+        naps = re.findall(r"Nap Window:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*-\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})", b)
+        out.append({
+            "date": d.group(1), "score": float(d.group(2)),
+            "total_min": minutes(_g(r"Daily Sleep:\s*([^(\n]+)", b)),
+            "main_min": minutes(_g(r"Main Sleep \(asleep\):\s*(.+)", b)),
+            "main_period_min": minutes(_g(r"Main Sleep Period \(incl\. awake\):\s*(.+)", b)),
+            "deep_pct": pct("Deep Sleep Ratio"), "light_pct": pct("Light Sleep Ratio"),
+            "rem_pct": pct("REM Ratio"), "awake_pct": pct("Awake Ratio"),
+            "awake_min": minutes(_g(r"Awake Time:\s*(.+)", b)),
+            "awake_count": float(v) if (v := _g(r"Awake Count[^:]*:\s*(\d+)", b)) else None,
+            "bedtime": win.group(1) if win else None, "waketime": win.group(2) if win else None,
+            "naps_min": minutes(_g(r"Naps Total \(asleep\):\s*(.+)", b)) or 0,
+            "naps": [{"start": a, "end": e} for a, e in naps],
+        })
+    return sorted(out, key=lambda x: x["date"])
+
+
 def parse_fit_urls(t: str) -> list[str]:
     return re.findall(r"https?://[^\s\"'<>)]+", t)
 

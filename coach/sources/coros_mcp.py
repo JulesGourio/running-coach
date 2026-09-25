@@ -230,6 +230,9 @@ class CorosMCP:
     async def sleep(self, days: int = 7) -> list[dict]:
         return parsers.parse_sleep(await self.call("querySleepOverview", {"days": days}))
 
+    async def sleep_range(self, start: str, end: str) -> list[dict]:
+        return parsers.parse_sleep_full(await self.call("querySleepOverview", {"startDate": start, "endDate": end}))
+
     async def rhr(self, days: int = 30) -> list[dict]:
         return parsers.parse_rhr(await self.call("queryRestingHeartRate", {"days": days}))
 

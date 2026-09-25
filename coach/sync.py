@@ -48,9 +48,42 @@ async def sync_mcp(s: Settings, db: DB, days: int = 30, max_fit: int = 15, inter
         for r in await c.rhr(min(days, 60)):
             db.upsert_daily(**r)
 
+        await fetch_sleep(c, db, today - timedelta(days=max(days, 14)), today)
         await refresh_plan(c, db)
     log(f"COROS : {stats['activities']} séances, {stats['fit']} fichiers FIT téléchargés.")
     return stats
+
+
+async def fetch_sleep(c: CorosMCP, db: DB, start: date, end: date) -> int:
+    """Nightly sleep detail (phases, naps, bed/wake times), in 30-day windows."""
+    n, a = 0, start
+    while a <= end:
+        b = min(a + timedelta(days=29), end)
+        for r in await c.sleep_range(ymd(a), ymd(b)):
+            db.upsert_sleep(r)
+            n += 1
+        a = b + timedelta(days=1)
+    return n
+
+
+async def sync_history(s: Settings, db: DB, days: int = 365, log: Log = print) -> dict:
+    """Long history without FIT downloads (COROS limits those per day): activity summaries (date, type, distance,
+    time, pace, HR) and nightly sleep, back `days` days. FIT files keep coming with the regular syncs."""
+    today = date.today()
+    start = today - timedelta(days=days)
+    n_act = 0
+    async with CorosMCP(s) as c:
+        a = start
+        while a <= today:
+            b = min(a + timedelta(days=89), today)
+            for r in await c.sport_records(ymd(a), ymd(b)):
+                db.upsert_activity({**r, "source": "coros"})
+                n_act += 1
+            a = b + timedelta(days=1)
+        n_sleep = await fetch_sleep(c, db, start, today)
+    db.set_meta("history_since", start.isoformat())
+    log(f"Historique COROS sur {days} jours : {n_act} séances, {n_sleep} nuits.")
+    return {"activities": n_act, "sleep": n_sleep}
 
 
 async def refresh_plan(c: CorosMCP, db: DB, start: date | None = None, end: date | None = None) -> dict | None:
