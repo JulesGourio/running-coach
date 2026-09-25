@@ -37,7 +37,7 @@ Le Plan ID du bloc en cours ne doit jamais être montré à l'utilisateur (contr
 
 Package Python `coach/` (voir README). En local, le serveur MCP `running-coach` (déclaré dans `.mcp.json`)
 expose les analyses calculées à partir des fichiers FIT : `resume`, `seances`, `analyse_seance`,
-`progression`, `charge`, `plan`, `enregistrer_verdict`, `synchroniser`.
+`progression`, `charge`, `plan`, `modifications_plan`, `enregistrer_verdict`, `synchroniser`.
 
 Pour juger une séance :
 1. Lis `analyse_seance` (métriques, répétitions contre la cible, constats automatiques, note sur 10).
@@ -47,8 +47,16 @@ Pour juger une séance :
    (météo, dénivelé, séance adaptée volontairement).
 3. Enregistre-le avec `enregistrer_verdict` : il s'affiche dans le dashboard Streamlit.
 
-Pour un bilan de semaine, croise `resume`, `charge` et `plan`. Les modifications du plan passent toujours
-par le connecteur COROS de Claude, jamais par l'appli locale.
+Pour un bilan de semaine, croise `resume`, `charge` et `plan`.
+
+Le plan se modifie de deux façons, sur le même plan COROS :
+- par Claude, avec le connecteur COROS (`updateTrainingPlan`), quand Jules le demande dans la conversation ;
+- par Jules dans la page Plan du dashboard (`coach/plan_edit.py`) : modifier, alléger, décaler les allures,
+  échanger deux jours, suggestions selon la forme et la charge. Chaque modification est mise en attente,
+  affichée avant/après, puis envoyée sur COROS après confirmation ; l'historique est dans la table
+  `plan_changes` (outil `modifications_plan`). Consulte-le avant de proposer un changement, pour ne pas
+  défaire ce que Jules vient de régler.
+Dans les deux cas : jamais les jours passés ou réalisés, allures entre 120 et 1499 s/km.
 
 Code : les réponses COROS du serveur officiel sont du texte, lu par `coach/sources/parsers.py`.
 Si COROS change son format, adapte ces fonctions et `tests/test_parsers.py`. Lance `uv run pytest`

@@ -48,21 +48,28 @@ async def sync_mcp(s: Settings, db: DB, days: int = 30, max_fit: int = 15, inter
         for r in await c.rhr(min(days, 60)):
             db.upsert_daily(**r)
 
-        plan = await c.plan()
-        if plan:
-            db.set_meta("plan", json.dumps(plan))
-            p0, p1 = date.fromisoformat(plan["start"]), date.fromisoformat(plan["end"])
-            for a, b in ((today - timedelta(days=27), today), (today + timedelta(days=1), today + timedelta(days=21))):
-                a, b = max(a, p0), min(b, p1)
-                if a > b:
-                    continue
-                details = await c.plan_details(plan["id"], ymd(a), ymd(b))
-                if details["phases"]:
-                    db.set_meta("phases", json.dumps(details["phases"]))
-                for d in details["days"]:
-                    db.upsert_plan_day(d["date"], d["day_no"], d["rest"], d["courses"])
+        await refresh_plan(c, db)
     log(f"COROS : {stats['activities']} séances, {stats['fit']} fichiers FIT téléchargés.")
     return stats
+
+
+async def refresh_plan(c: CorosMCP, db: DB, start: date | None = None, end: date | None = None) -> dict | None:
+    """Store the in-progress plan (the whole plan by default) locally, in 28-day windows (the COROS maximum)."""
+    plan = await c.plan()
+    if not plan:
+        return None
+    db.set_meta("plan", json.dumps(plan))
+    p0, p1 = date.fromisoformat(plan["start"]), date.fromisoformat(plan["end"])
+    a, stop = max(start or p0, p0), min(end or p1, p1)
+    while a <= stop:
+        b = min(a + timedelta(days=27), stop)
+        details = await c.plan_details(plan["id"], ymd(a), ymd(b))
+        if details["phases"]:
+            db.set_meta("phases", json.dumps(details["phases"]))
+        for d in details["days"]:
+            db.upsert_plan_day(d["date"], d["day_no"], d["rest"], d["courses"])
+        a = b + timedelta(days=1)
+    return plan
 
 
 def sync_web(s: Settings, db: DB, days: int = 30, max_fit: int = 15, log: Log = print) -> dict:

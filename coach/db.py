@@ -60,6 +60,17 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+CREATE TABLE IF NOT EXISTS plan_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT,
+    date TEXT,
+    day_no INTEGER,
+    reason TEXT,
+    before_json TEXT,
+    after_json TEXT,
+    status TEXT,
+    message TEXT
+);
 """
 
 DAILY_COLS = ["hrv", "hrv_lo", "hrv_hi", "hrv_base", "hrv_eval", "rhr", "sleep_score", "sleep_total",
@@ -207,6 +218,19 @@ class DB:
                  "courses": json.loads(r["courses_json"] or "[]")} for r in rows]
 
     # ---- meta ----
+    def add_plan_change(self, change: dict, status: str, message: str = "") -> None:
+        with self.conn() as c:
+            c.execute("INSERT INTO plan_changes (created_at, date, day_no, reason, before_json, after_json, status, message) "
+                      "VALUES (?,?,?,?,?,?,?,?)",
+                      (now_iso(), change["date"], change["day_no"], change.get("reason", ""),
+                       json.dumps(change.get("before", [])), json.dumps(change["after"]), status, message))
+
+    def plan_changes(self, limit: int = 50) -> list[dict]:
+        with self.conn() as c:
+            rows = c.execute("SELECT * FROM plan_changes ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [{**dict(r), "before": json.loads(r["before_json"] or "[]"), "after": json.loads(r["after_json"] or "[]")}
+                for r in rows]
+
     def get_meta(self, key: str) -> str | None:
         with self.conn() as c:
             r = c.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()

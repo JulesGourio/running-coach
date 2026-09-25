@@ -45,6 +45,7 @@ VS Code avec Claude Code, accepte ce serveur. Claude peut alors :
 | `resume` | forme du jour, charge, prédictions, projection, dernières séances, séances à venir |
 | `seances` / `analyse_seance` | toutes les métriques d'une séance et le verdict automatique |
 | `progression` / `charge` / `plan` | tendances, modèle de charge, plan contre réalisé |
+| `modifications_plan` | historique des modifications du plan faites depuis le dashboard |
 | `enregistrer_verdict` | enregistre le verdict rédigé par Claude, affiché ensuite dans le dashboard |
 | `synchroniser` | lance une synchronisation COROS |
 
@@ -91,6 +92,23 @@ directement dans ton calendrier.
 Les FC max et au seuil sont estimées depuis tes séances (seuil = meilleure FC moyenne sur 20 min).
 Pour plus de précision, renseigne `ATHLETE_HR_MAX`, `ATHLETE_LTHR` et `ATHLETE_THRESHOLD_PACE` dans `.env`.
 Après un changement de profil, les analyses sont recalculées automatiquement.
+
+## Plan modifiable
+
+La page **Plan** du dashboard affiche le plan COROS semaine par semaine (volume prévu, réalisé, séances de
+qualité, statut de chaque jour) et permet de le modifier :
+- **Modifier une séance** : ajuster le volume (50-150 %) et les allures de qualité (± s/km), la remplacer par
+  un modèle (footing, footing + accélérations, VMA, seuil, allure 10 km, sortie longue, sortie longue avec
+  allure, repos) aux allures calculées sur tes zones et ta VMA, ou l'échanger avec un autre jour.
+- **Ajuster plusieurs séances** : cette semaine ou toutes les semaines restantes, éventuellement seulement
+  les séances de qualité (par exemple -3 s/km quand la VMA progresse).
+- **Suggestions** : alléger ou remplacer la séance de qualité quand la forme du jour est orange ou rouge,
+  alléger la semaine quand le ratio de charge COROS reste au-dessus de 1,5, reprogrammer une séance de
+  qualité manquée sur le prochain jour facile.
+
+Les modifications sont mises en attente et affichées avant/après, puis envoyées sur COROS (`updateTrainingPlan`,
+seulement les jours changés) après confirmation, et relues aussitôt. Les jours passés ou déjà réalisés ne sont
+jamais modifiés. L'historique est gardé en local et consultable par Claude (`modifications_plan`).
 
 ## Commandes
 

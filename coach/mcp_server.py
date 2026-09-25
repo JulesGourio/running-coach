@@ -81,6 +81,16 @@ def plan(jours_passes: int = 7, jours_a_venir: int = 14) -> dict:
 
 
 @server.tool()
+def modifications_plan(nombre: int = 20) -> dict:
+    """Historique des modifications du plan envoyées sur COROS depuis l'appli (jour, avant, après, raison, statut)."""
+    from coach.plan_edit import describe
+    _, db = _ctx()
+    return {"modifications": [{"envoyee_le": h["created_at"], "jour": h["date"], "avant": describe(h["before"]),
+                               "apres": describe(h["after"]), "raison": h["reason"], "statut": h["status"]}
+                              for h in db.plan_changes(nombre)]}
+
+
+@server.tool()
 def enregistrer_verdict(label_id: str, texte: str, note: float | None = None) -> str:
     """Enregistre le verdict rédigé pour une séance ; il s'affiche dans le dashboard."""
     _, db = _ctx()
