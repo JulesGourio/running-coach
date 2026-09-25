@@ -47,7 +47,8 @@ def fdur(sec) -> str:
 
 def fdate(d: str | date) -> str:
     d = date.fromisoformat(d) if isinstance(d, str) else d
-    return f"{DOW[d.weekday()]} {d.day} {MON[d.month - 1]}"
+    year = f" {d.year}" if d.year != date.today().year else ""
+    return f"{DOW[d.weekday()]} {d.day} {MON[d.month - 1]}{year}"
 
 
 def fnum(v, dec=1) -> str:

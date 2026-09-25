@@ -9,17 +9,22 @@ from common import BLUE, ORANGE, ZONE_COLORS, ctx, fdate, fdur, fnum, fpace, pac
 s, db = ctx()
 st.title("Séances")
 
-rows = service.sessions(db, 120)
+c1, c2, c3 = st.columns([1.2, 2, 5])
+period = c1.selectbox("Période", ["3 mois", "6 mois", "1 an", "Tout"], key="s-period")
+rows = service.sessions(db, {"3 mois": 91, "6 mois": 182, "1 an": 365}.get(period, 3650))
 if not rows:
     st.info("Aucune séance synchronisée.")
     st.stop()
+cats = sorted({x["kind_fr"] or "Non analysée" for x in rows})
+cat = c2.selectbox("Type", ["Tous", *cats], key="s-cat")
+rows = [x for x in rows if cat == "Tous" or (x["kind_fr"] or "Non analysée") == cat]
 
 
 def label(x):
     return f"{fdate(x['date'])} · {x['headline'] or x['name'] or x['type']}"
 
 
-choice = st.selectbox("Séance", rows, format_func=label)
+choice = c3.selectbox("Séance", rows, format_func=label)
 
 
 @st.cache_data(show_spinner="Lecture du fichier FIT…")
@@ -177,3 +182,37 @@ if be:
     names = {"400": "400 m", "1000": "1 km", "1609": "1 mile", "3000": "3 km", "5000": "5 km", "10000": "10 km", "21097": "Semi"}
     st.dataframe(pd.DataFrame([{"Distance": names.get(k, k), "Temps": fdur(t), "Allure": f"{fpace(t / (int(k) / 1000))}/km"}
                                for k, t in be.items()]), hide_index=True)
+
+# ---- same kind of session, since the start of the account ---------------------------------------------
+kind = v.get("type_fr")
+if kind:
+    a_ = service.athlete(db, s)
+    ans = db.analyses()
+    same = []
+    for x in service.sessions(db, 3650):
+        if x["kind_fr"] != kind:
+            continue
+        mx = (ans.get(x["label_id"]) or {}).get("metrics") or {}
+        reps = [g["avg_pace"] for g in hard_segments(mx, a_) if g["duration_s"] >= 40]
+        same.append({"date": x["date"], "structure": x.get("structure") or "", "km": x["distance_km"],
+                     "pace": x["avg_pace"], "hr": x["avg_hr"], "rep_med": float(pd.Series(reps).median()) if reps else None,
+                     "rep_best": min(reps) if reps else None, "current": x["label_id"] == choice["label_id"]})
+    if len(same) > 1:
+        st.subheader(f"Tes séances « {kind} » ({len(same)})", divider="gray")
+        sd = pd.DataFrame(same).sort_values("date")
+        y = sd["rep_med"] if sd["rep_med"].notna().sum() >= 2 else sd["pace"]
+        what = "allure médiane des répétitions" if y is sd["rep_med"] else "allure moyenne"
+        fig = go.Figure(go.Scatter(x=pd.to_datetime(sd["date"]), y=y, mode="lines+markers", line=dict(color=BLUE, width=1.5),
+                                   marker=dict(size=[14 if c else 8 for c in sd["current"]], color=[ORANGE if c else BLUE for c in sd["current"]]),
+                                   customdata=list(zip(y.map(fpace), sd["structure"], sd["hr"].fillna(0).round(0))),
+                                   hovertemplate="%{x|%d %b %Y} · %{customdata[1]}<br>%{customdata[0]}/km · FC %{customdata[2]}<extra></extra>"))
+        style(fig, 260, "pace").update_layout(title=f"{what.capitalize()}, séance après séance (en orange : celle-ci)", hovermode="closest")
+        pace_ticks(fig, y.dropna().tolist())
+        st.plotly_chart(fig, width="stretch")
+        st.dataframe(pd.DataFrame([{"Date": fdate(r_["date"]), "Contenu": r_["structure"], "Km": r_["km"],
+                                    "Allure moy.": f"{fpace(r_['pace'])}/km" if r_["pace"] else "—",
+                                    "Répétitions (médiane)": f"{fpace(r_['rep_med'])}/km" if r_["rep_med"] else "—",
+                                    "Meilleure répétition": f"{fpace(r_['rep_best'])}/km" if r_["rep_best"] else "—",
+                                    "FC moy.": round(r_["hr"]) if r_["hr"] == r_["hr"] and r_["hr"] else None}
+                                   for r_ in sorted(same, key=lambda r_: r_["date"], reverse=True)]),
+                     hide_index=True, width="stretch", column_config={"Km": st.column_config.NumberColumn(format="%.1f")})

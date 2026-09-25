@@ -103,6 +103,33 @@ Les FC max et au seuil sont estimées depuis tes séances (seuil = meilleure FC 
 Pour plus de précision, renseigne `ATHLETE_HR_MAX`, `ATHLETE_LTHR` et `ATHLETE_THRESHOLD_PACE` dans `.env`.
 Après un changement de profil, les analyses sont recalculées automatiquement.
 
+## Historique et sommeil
+
+- `uv run coach history --days 3650` (ou le bouton de la page **Historique**) récupère toutes les séances
+  (résumés : distance, temps, allure, FC) et toutes les nuits depuis l'ouverture du compte COROS. Les fichiers
+  FIT détaillés arrivent ensuite au fil des synchronisations : COROS en autorise 50 par jour.
+- Page **Historique** : période réglable (30 jours à tout), comparée à la période précédente ; km par semaine ou
+  par mois et par type de séance ; allure de chaque sortie ; km par année ; records (plus longue sortie, plus
+  grosse semaine et plus gros mois) ; meilleure sortie sur 5 km, 10 km, semi et marathon.
+- Page **Séances** : filtre par période et par type ; pour chaque séance, toutes les séances du même type depuis
+  le début (allure des répétitions séance après séance).
+- Page **Récupération** : dernière nuit en détail (phases comparées aux repères, siestes, réveils), sommeil
+  conseillé pour la nuit suivante (8 h de base, +30 min après une séance dure, une charge élevée ou une dette
+  de plus de 3 h sur 7 nuits) avec l'heure de coucher, dette sur 7 nuits, régularité des horaires, moyennes par
+  jour de semaine, mois et année, liste des siestes, VFC et FC de repos.
+
+## Plusieurs plans
+
+L'onglet **Plan** montre le plan principal (celui en cours dans COROS) et des plans en brouillon. « + Nouveau
+plan » génère un plan complet pour une course (5 km, 10 km, semi, marathon) : phases base / développement /
+spécifique / course, volumes semaine par semaine (semaine plus légère toutes les 4, affûtage sur 2), séances de
+qualité espacées, allures calculées sur la VMA, le seuil et l'allure objectif (`coach/plan_builder.py`).
+Chaque jour d'un brouillon se remplace par une séance de la bibliothèque. COROS n'accepte un nouveau plan que
+s'il démarre dans les 14 jours : le bouton « Créer dans COROS » s'active à ce moment-là.
+
+Pour le plan principal : les semaines d'avant le plan sont affichées aussi (8 par défaut), avec le volume
+réalisé et prévu semaine par semaine, et chaque jour montre la séance réalisée à côté de celle prévue.
+
 ## Séances types
 
 La page **Séances types** regroupe les séances de fractionné par catégorie (fractionné court, fractionné long,
@@ -135,6 +162,7 @@ jamais modifiés. L'historique est gardé en local et consultable par Claude (`m
 |---|---|
 | `uv run coach login` | connexion au serveur officiel COROS |
 | `uv run coach sync [--days N] [--max-fit N] [--source auto\|mcp\|web]` | synchronisation puis analyse |
+| `uv run coach history [--days N]` | historique long : séances résumées et nuits (sans FIT) |
 | `uv run coach import-fit DOSSIER` | import de fichiers FIT |
 | `uv run coach analyze [--force]` | recalcul des analyses |
 | `uv run coach status` | forme du jour et dernières séances dans le terminal |
