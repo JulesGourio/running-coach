@@ -178,7 +178,20 @@ class CorosMCP:
 
     async def call(self, tool: str, args: dict | None = None) -> str:
         res = await self.client.call_tool(tool, args or {})
-        text = "\n".join(getattr(c, "text", "") for c in res.content if getattr(c, "type", "") == "text")
+        parts = []
+        for c in res.content:
+            if getattr(c, "type", "") != "text":
+                continue
+            t = getattr(c, "text", "")
+            # COROS's MCP server wraps its text content in an extra layer of JSON encoding
+            # (a quoted string with escaped \n) instead of returning it literally; unwrap it.
+            if t[:1] == '"':
+                try:
+                    t = json.loads(t)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            parts.append(t)
+        text = "\n".join(parts)
         if res.is_error:
             raise CorosError(f"{tool} : {text or 'erreur COROS'}")
         return text
