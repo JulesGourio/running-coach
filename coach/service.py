@@ -5,6 +5,7 @@ import json
 import statistics
 from datetime import date, timedelta
 
+import numpy as np
 import pandas as pd
 
 from coach.config import Settings
@@ -122,40 +123,45 @@ def progress(db: DB, s: Settings) -> dict:
         return eff, dur
 
     eff90, _ = best(90)
-    _, dur42 = best(42)
-    cs = prog.critical_speed(dur42)
     D = s.goal_distance_m
-    preds = {}
-    coros = [f for f in db.fitness() if f.get("p10")]
-    if coros:
-        preds["COROS"] = coros[-1]["p10"]
-    if cs:
-        preds["Vitesse critique"] = prog.predict_from_cs(cs, D)
-    if "5000" in eff90:
-        preds["Riegel (meilleur 5 km)"] = prog.riegel(eff90["5000"][0], 5000, D)
-    vds = [prog.vdot(int(k), eff90[k][0]) for k in ("3000", "5000", "10000", "21097") if k in eff90]
-    vd = max(vds) if vds else None
-    if vd:
-        preds["VDOT"] = prog.time_for_vdot(vd, D)
 
-    series = [(date.fromisoformat(f["date"]), f["p10"]) for f in coros]
-    if len(series) < 3:
-        series = []
-        for w in range(8, -1, -1):
-            end = today - timedelta(weeks=w)
-            e, _ = best(42, end)
-            vs = [prog.vdot(int(k), e[k][0]) for k in ("3000", "5000", "10000") if k in e]
-            if vs:
-                series.append((end, prog.time_for_vdot(max(vs), D)))
+    # Interval sessions (reps isolated from recovery) are the only near-max efforts in the data: no race or
+    # continuous 5/10 km this year. VMA is reverse-engineered from them, then extrapolated to the race.
+    rep_sessions = [(date.fromisoformat(x["date"]), an[x["label_id"]]["metrics"].get("quality_segments") or [])
+                    for x in acts]
+    vma_now = prog.estimate_vma(rep_sessions, a.threshold_pace, a.hr_max, today)
+    fit = [f for f in db.fitness() if f.get("vo2max") or f.get("p10")]
+    last_fit = fit[-1] if fit else {}
+    vma = {
+        "fractionnes": vma_now["vma"] if vma_now else None,
+        "fractionnes_seances": vma_now["sessions"] if vma_now else [],
+        "seuil": (1000 / a.threshold_pace) / prog.THRESHOLD_VMA_FRACTION if a.threshold_pace else None,
+        "vo2max": (last_fit["vo2max"] / 3.5) / 3.6 if last_fit.get("vo2max") else None,  # Léger: VO2max ≈ 3.5 × VMA (km/h)
+    }
+    preds = {}
+    if vma["fractionnes"]:
+        preds["Fractionnés (VMA estimée)"] = prog.predict_from_vma(vma["fractionnes"], D)
+    if last_fit.get("p10"):
+        preds["COROS"] = last_fit["p10"]
+    if vma["seuil"]:
+        preds["Allure seuil COROS"] = prog.predict_from_vma(vma["seuil"], D)
+    estimate = float(np.median(list(preds.values()))) if preds else None
+
+    series = []
+    for w in range(8, -1, -1):
+        end = today - timedelta(weeks=w)
+        v = prog.estimate_vma(rep_sessions, a.threshold_pace, a.hr_max, end)
+        if v:
+            series.append((end, prog.predict_from_vma(v["vma"], D)))
     goal_day = date.fromisoformat(s.goal_date) if s.goal_date else None
-    proj = prog.projection(series, goal_day) if goal_day and series else None
+    proj = prog.projection_from_current(estimate, series, goal_day, today) if goal_day and estimate else None
     probs = {}
     if proj:
         for label, t in (("A", s.goal_a), ("B", s.goal_b)):
             if t:
                 probs[label] = prog.prob_under(t, proj)
     return {"athlete": a.__dict__ | {"lt_hr": a.lt_hr}, "ref_hr": ref_hr, "pace_at_hr": pace_hr, "ef_rows": ef_rows,
-            "best_efforts": eff90, "critical_speed": cs, "vdot": vd, "predictions": preds,
+            "best_efforts": eff90, "vma": vma, "estimate": estimate, "predictions": preds,
             "prediction_series": series, "projection": proj, "probabilities": probs}
 
 
@@ -210,9 +216,10 @@ def overview(db: DB, s: Settings) -> dict:
         "forme_du_jour": readiness_today(db, s),
         "charge": {**now, "monotony": lm["monotony"], "strain": lm["strain"]},
         "predictions_s": {k: round(v) for k, v in pr["predictions"].items()},
+        "estimation_10km_s": round(pr["estimate"]) if pr["estimate"] else None,
         "projection": pr["projection"],
         "probabilites": pr["probabilities"],
-        "vitesse_critique": pr["critical_speed"],
+        "vma_m_s": pr["vma"],
         "dernieres_seances": [{k: r[k] for k in ("label_id", "date", "name", "kind_fr", "score", "findings", "distance_km")}
                               for r in sessions(db, 14)],
         "a_venir": [p for p in plan_view(db, s, back=0, ahead=10) if p["status"] == "à venir"],

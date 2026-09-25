@@ -94,6 +94,26 @@ def test_predictions():
     assert 0 <= prog.prob_under(2400, proj) < prog.prob_under(2490, proj) <= 1
 
 
+def test_vma_from_intervals_and_10k_prediction():
+    # 12 x 400 m in 88 s (3:40/km) and 6 x 1 km at 4:02: a runner around VMA 15.3 km/h, 10 km ~43-44 min.
+    s400 = [{"duration_s": 88.0, "distance_m": 400.0, "avg_pace": 220.0, "avg_hr": 185.0}] * 12
+    s1k = [{"duration_s": 242.0, "distance_m": 1000.0, "avg_pace": 242.0, "avg_hr": 186.0}] * 6
+    easy = [{"duration_s": 95.0, "distance_m": 400.0, "avg_pace": 250.0, "avg_hr": 160.0}] * 8
+    sessions = [(date(2026, 9, 16), s400), (date(2026, 9, 24), s1k), (date(2026, 9, 20), easy)]
+    v = prog.estimate_vma(sessions, threshold_pace=262, hr_max=200, end=date(2026, 9, 25))
+    assert 15.0 < v["vma"] * 3.6 < 15.7
+    assert "2026-09-20" not in v["sessions"]  # HR never near max: not a capacity signal
+    assert 42 * 60 < prog.predict_from_vma(v["vma"], 10000) < 44.5 * 60
+    assert prog.session_vma(s400[:2], 262) is None  # too few reps
+
+
+def test_projection_ignores_noisy_trend_and_never_regresses():
+    noisy = [(date(2026, 8, 1) + (date(2026, 8, 8) - date(2026, 8, 1)) * i, t)
+             for i, t in enumerate([2660, 2660, 2760, 2760, 2720, 2613])]
+    p = prog.projection_from_current(2606, noisy, date(2026, 12, 13), date(2026, 9, 25))
+    assert p["basis"] == "typique" and p["low"] < p["projected"] < p["high"] <= 2606
+
+
 def test_readiness_flags_low_hrv():
     base = [{"date": f"2026-09-{d:02d}", "hrv": 85 + (d % 3), "rhr": 52, "sleep_score": 85} for d in range(1, 25)]
     good = readiness(base + [{"date": "2026-09-25", "hrv": 86, "rhr": 52, "sleep_score": 88}], tsb=0)
