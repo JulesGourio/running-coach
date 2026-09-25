@@ -23,9 +23,9 @@ done = [d for d in days if d["date"] < pd.Timestamp.today().strftime("%Y-%m-%d")
 if done:
     ok = sum(1 for d in done if d["status"] == "faite")
     scores = [x["score"] for d in done for x in d["done"] if x["score"] is not None]
-    k = st.columns(2)
-    k[0].metric("Séances réalisées", f"{ok}/{len(done)}")
-    k[1].metric("Note moyenne", fnum(sum(scores) / len(scores)) if scores else "—")
+    with st.container(horizontal=True):
+        st.metric("Séances réalisées", f"{ok}/{len(done)}", border=True)
+        st.metric("Note moyenne", fnum(sum(scores) / len(scores)) if scores else "—", border=True)
 
 icons = {"faite": "✓ faite", "manquée": "✗ manquée", "à venir": "à venir", "repos": "repos"}
 rows = []

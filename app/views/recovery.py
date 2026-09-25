@@ -10,10 +10,11 @@ from common import BAND, BLUE, LEVEL_COLOR, LEVEL_ICON, ORANGE, ctx, style
 s, db = ctx()
 st.title("Récupération")
 r = service.readiness_today(db, s)
-st.markdown(f":{LEVEL_COLOR[r['level']]}-badge[{LEVEL_ICON[r['level']]} {r['level'].capitalize()}] "
-            f"Disponibilité {r['score'] if r['score'] is not None else '—'}/100")
-for reason in r["reasons"]:
-    st.markdown(f"- {reason}")
+with st.container(border=True):
+    st.markdown(f":{LEVEL_COLOR[r['level']]}-badge[{LEVEL_ICON[r['level']]} {r['level'].capitalize()}] "
+                f"Disponibilité {r['score'] if r['score'] is not None else '—'}/100")
+    for reason in r["reasons"]:
+        st.markdown(f"- {reason}")
 
 daily = pd.DataFrame(db.daily((date.today() - timedelta(days=60)).isoformat()))
 if daily.empty:

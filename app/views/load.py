@@ -37,10 +37,12 @@ fig.add_hline(y=1.5, line=dict(color=MUTED, dash="dash"), annotation_text="exces
 style(fig, 260).update_layout(title="Ratio charge aiguë / chronique", showlegend=False)
 c2.plotly_chart(fig, width="stretch")
 
-k = st.columns(3)
-k[0].metric("Monotonie (7 j)", fnum(lm["monotony"], 2), help="Au-dessus de 2 : charge trop uniforme, manque de vraies journées faciles.")
-k[1].metric("Contrainte (7 j)", fnum(lm["strain"], 0), help="Charge de la semaine × monotonie (Foster).")
-k[2].metric("Charge 7 derniers jours", fnum(model["load"].tail(7).sum(), 0))
+with st.container(horizontal=True):
+    st.metric("Monotonie (7 j)", fnum(lm["monotony"], 2), border=True,
+              help="Au-dessus de 2 : charge trop uniforme, manque de vraies journées faciles.")
+    st.metric("Contrainte (7 j)", fnum(lm["strain"], 0), border=True, help="Charge de la semaine × monotonie (Foster).")
+    st.metric("Charge 7 derniers jours", fnum(model["load"].tail(7).sum(), 0), border=True,
+              chart_data=model["load"].tail(28).tolist(), chart_type="bar")
 
 if not weekly.empty:
     w = weekly.tail(16)

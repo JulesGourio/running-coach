@@ -12,16 +12,18 @@ st.title("Progression")
 pr = service.progress(db, s)
 a = pr["athlete"]
 
-k = st.columns(4)
 fit = [f for f in db.fitness() if f.get("vo2max")]
-k[0].metric("VO2max (COROS)", fnum(fit[-1]["vo2max"], 0) if fit else "—",
-            delta=fnum(fit[-1]["vo2max"] - fit[0]["vo2max"], 0) if len(fit) > 1 else None)
 cs = pr["critical_speed"]
-k[1].metric("Vitesse critique", f"{fpace(cs['cs_pace'])}/km" if cs else "—",
-            help="Allure tenable environ 30 à 40 min, calculée sur tes meilleurs efforts de 3 à 20 min (42 derniers jours).")
-k[2].metric("Réserve anaérobie (D')", f"{fnum(cs['d_prime'], 0)} m" if cs else "—",
-            help="Distance que tu peux courir au-dessus de ta vitesse critique avant d'être à bout.")
-k[3].metric("VDOT", fnum(pr["vdot"], 1) if pr["vdot"] else "—", help="Indice de Jack Daniels calculé sur ton meilleur effort récent.")
+with st.container(horizontal=True):
+    st.metric("VO2max (COROS)", fnum(fit[-1]["vo2max"], 0) if fit else "—", border=True,
+              delta=fnum(fit[-1]["vo2max"] - fit[0]["vo2max"], 0) if len(fit) > 1 else None,
+              chart_data=[f["vo2max"] for f in fit[-30:]] if len(fit) > 1 else None, chart_type="line")
+    st.metric("Vitesse critique", f"{fpace(cs['cs_pace'])}/km" if cs else "—", border=True,
+              help="Allure tenable environ 30 à 40 min, calculée sur tes meilleurs efforts de 3 à 20 min (42 derniers jours).")
+    st.metric("Réserve anaérobie (D')", f"{fnum(cs['d_prime'], 0)} m" if cs else "—", border=True,
+              help="Distance que tu peux courir au-dessus de ta vitesse critique avant d'être à bout.")
+    st.metric("VDOT", fnum(pr["vdot"], 1) if pr["vdot"] else "—", border=True,
+              help="Indice de Jack Daniels calculé sur ton meilleur effort récent.")
 
 series = pr["prediction_series"]
 if series:

@@ -24,7 +24,7 @@ with c1:
     st.subheader("Forme du jour")
     lvl = r["level"]
     st.markdown(f":{LEVEL_COLOR[lvl]}-badge[{LEVEL_ICON[lvl]} {lvl.capitalize()}]")
-    st.metric("Disponibilité", f"{r['score']}/100" if r["score"] is not None else "—",
+    st.metric("Disponibilité", f"{r['score']}/100" if r["score"] is not None else "—", border=True,
               help="Combine ta VFC et ta FC de repos (comparées à tes 4 dernières semaines), le sommeil et la fraîcheur (TSB).")
     for reason in r["reasons"]:
         st.markdown(f"- {reason}")
@@ -44,39 +44,46 @@ a = service.athlete(db, s)
 fit_rows = db.fitness()
 vo2max = next((f["vo2max"] for f in reversed(fit_rows) if f.get("vo2max")), None)
 st.subheader("Profil & zones")
-pc = st.columns(5)
-pc[0].metric("FC max", f"{fnum(a.hr_max, 0)} bpm",
-             help="Fréquence cardiaque maximale. Estimée depuis tes séances (2e pic le plus haut sur 120 jours, "
-                  "pour ignorer un artefact capteur isolé) ; renseigne ATHLETE_HR_MAX dans .env pour la figer.")
-pc[1].metric("FC repos", f"{fnum(a.hr_rest, 0)} bpm", help="Médiane de ta FC de repos mesurée par la montre sur les 30 derniers jours.")
-pc[2].metric("FC seuil (LTHR)", f"{fnum(a.lt_hr, 0)} bpm",
-             help="FC au seuil lactique : l'intensité que tu peux tenir environ 1 heure. Estimée depuis ta meilleure "
-                  "moyenne sur 20 minutes continues, sinon 89 % de FC max par défaut.")
-pc[3].metric("Allure seuil", f"{fpace(a.threshold_pace)}/km",
-             help="Allure à l'intensité seuil. Vient du dernier bilan VO2max/prédictions de COROS.")
-pc[4].metric("VO2max", fnum(vo2max, 0) if vo2max else "—",
-             help="Consommation maximale d'oxygène, estimée par COROS à partir de tes séances : "
-                  "l'indicateur de référence de ta capacité aérobie. Sans unité affichée ici (ml/kg/min).")
+with st.container(horizontal=True):
+    st.metric("FC max", f"{fnum(a.hr_max, 0)} bpm", border=True,
+              help="Fréquence cardiaque maximale. Estimée depuis tes séances (2e pic le plus haut sur 120 jours, "
+                   "pour ignorer un artefact capteur isolé) ; renseigne ATHLETE_HR_MAX dans .env pour la figer.")
+    st.metric("FC repos", f"{fnum(a.hr_rest, 0)} bpm", border=True,
+              help="Médiane de ta FC de repos mesurée par la montre sur les 30 derniers jours.")
+    st.metric("FC seuil (LTHR)", f"{fnum(a.lt_hr, 0)} bpm", border=True,
+              help="FC au seuil lactique : l'intensité que tu peux tenir environ 1 heure. Estimée depuis ta meilleure "
+                   "moyenne sur 20 minutes continues, sinon 89 % de FC max par défaut.")
+    st.metric("Allure seuil", f"{fpace(a.threshold_pace)}/km", border=True,
+              help="Allure à l'intensité seuil. Vient du dernier bilan VO2max/prédictions de COROS.")
+    st.metric("VO2max", fnum(vo2max, 0) if vo2max else "—", border=True,
+              help="Consommation maximale d'oxygène, estimée par COROS à partir de tes séances : "
+                   "l'indicateur de référence de ta capacité aérobie. Sans unité affichée ici (ml/kg/min).")
 st.dataframe(zone_table(a), hide_index=True, width="stretch")
 st.caption("Zones calculées à partir de ta FC seuil et de ton allure seuil ci-dessus. Le seuil sépare l'endurance "
            "du travail de qualité : viser ~80 % du temps d'entraînement en Z1-Z2.")
 
 lm = service.load_model(db)
 now = lm["now"]
+model_tail = lm["model"].tail(30)
 st.subheader("Charge d'entraînement")
-k = st.columns(5)
-k[0].metric("Forme (CTL)", fnum(now.get("ctl"), 0), help="Moyenne pondérée de la charge sur 42 jours : ce que ton corps a assimilé.")
-k[1].metric("Fatigue (ATL)", fnum(now.get("atl"), 0), help="Moyenne pondérée de la charge sur 7 jours.")
-k[2].metric("Fraîcheur (TSB)", fnum(now.get("tsb"), 0), help="Forme moins fatigue, la veille. Sous -20 : fatigue élevée. Entre +5 et +15 : frais pour une course.")
-k[3].metric("Ratio aigu/chronique", fnum(now.get("acwr"), 2), help="Charge des 7 derniers jours / moyenne sur 28 jours. Au-dessus de 1,3 : risque de blessure accru.")
-k[4].metric("Monotonie", fnum(lm["monotony"], 1), help="Moyenne / écart-type de la charge sur 7 jours. Au-dessus de 2 : semaines trop uniformes, peu de vraie récupération.")
+with st.container(horizontal=True):
+    st.metric("Forme (CTL)", fnum(now.get("ctl"), 0), border=True, chart_data=model_tail["ctl"].tolist(), chart_type="line",
+              help="Moyenne pondérée de la charge sur 42 jours : ce que ton corps a assimilé.")
+    st.metric("Fatigue (ATL)", fnum(now.get("atl"), 0), border=True, chart_data=model_tail["atl"].tolist(), chart_type="line",
+              help="Moyenne pondérée de la charge sur 7 jours.")
+    st.metric("Fraîcheur (TSB)", fnum(now.get("tsb"), 0), border=True, chart_data=model_tail["tsb"].tolist(), chart_type="line",
+              help="Forme moins fatigue, la veille. Sous -20 : fatigue élevée. Entre +5 et +15 : frais pour une course.")
+    st.metric("Ratio aigu/chronique", fnum(now.get("acwr"), 2), border=True,
+              help="Charge des 7 derniers jours / moyenne sur 28 jours. Au-dessus de 1,3 : risque de blessure accru.")
+    st.metric("Monotonie", fnum(lm["monotony"], 1), border=True,
+              help="Moyenne / écart-type de la charge sur 7 jours. Au-dessus de 2 : semaines trop uniformes, peu de vraie récupération.")
 
 pr = service.progress(db, s)
 st.subheader("Objectif")
 preds = pr["predictions"]
 if "COROS" in preds:
     t = preds["COROS"]
-    st.metric("Prédiction 10 km (COROS)", fdur(t),
+    st.metric("Prédiction 10 km (COROS)", fdur(t), border=True,
               help="Modèle propriétaire de COROS, recalculé à chaque séance à partir de l'historique complet. "
                    "C'est la référence la plus fiable ici tant qu'aucune course ou effort continu 5/10 km "
                    "n'a été couru pour la calibrer autrement.")

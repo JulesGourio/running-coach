@@ -71,7 +71,7 @@ grid = [
 ]
 cols = st.columns(6)
 for i, (k, val, h) in enumerate(grid):
-    cols[i % 6].metric(k, val, help=h)
+    cols[i % 6].metric(k, val, help=h, border=True)
 
 reps = v.get("reps")
 if reps and reps.get("reps"):

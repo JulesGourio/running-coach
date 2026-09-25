@@ -16,9 +16,9 @@ from coach.config import Settings, get_settings  # noqa: E402
 from coach.db import DB  # noqa: E402
 from coach.metrics.zones import Athlete  # noqa: E402
 
-BLUE, ORANGE = "#2a78d6", "#eb6834"
-GOOD, WARN, CRIT, MUTED = "#0ca30c", "#fab219", "#d03b3b", "#898781"
-BAND = "rgba(42,120,214,0.10)"
+BLUE, ORANGE = "#2e6fdb", "#d9480f"
+GOOD, WARN, CRIT, MUTED = "#1a7f37", "#c9750a", "#cf222e", "#6b7280"
+BAND = "rgba(46,111,219,0.10)"
 DOW = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
 MON = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
 LEVEL_ICON = {"vert": ":material/check_circle:", "orange": ":material/warning:", "rouge": ":material/block:", "inconnu": ":material/help:"}

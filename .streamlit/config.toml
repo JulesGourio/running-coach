@@ -3,3 +3,48 @@ toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false
+
+[theme]
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+headingFont = "'Space Grotesk':https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+baseFontSize = 15
+headingFontWeights = [700, 600, 600, 600, 500, 500]
+linkUnderline = false
+baseRadius = "10px"
+showWidgetBorder = true
+showSidebarBorder = false
+
+[theme.light]
+primaryColor = "#D9480F"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f4f2"
+textColor = "#181a1f"
+borderColor = "#e4e3de"
+greenColor = "#1a7f37"
+orangeColor = "#c9750a"
+redColor = "#cf222e"
+grayColor = "#6b7280"
+blueColor = "#2e6fdb"
+chartCategoricalColors = ["#2e6fdb", "#d9480f", "#1a7f37", "#8250df", "#c9750a", "#6b7280"]
+
+[theme.light.sidebar]
+backgroundColor = "#f4f4f2"
+borderColor = "#e4e3de"
+
+[theme.dark]
+primaryColor = "#ff8a4c"
+backgroundColor = "#111317"
+secondaryBackgroundColor = "#1a1d23"
+textColor = "#eef0f3"
+borderColor = "#2b2e35"
+greenColor = "#3fb950"
+orangeColor = "#e0a244"
+redColor = "#f85149"
+grayColor = "#8b949e"
+blueColor = "#5b9bf7"
+chartCategoricalColors = ["#5b9bf7", "#ff8a4c", "#3fb950", "#a371f7", "#e0a244", "#8b949e"]
+
+[theme.dark.sidebar]
+backgroundColor = "#0b0d10"
+borderColor = "#2b2e35"
