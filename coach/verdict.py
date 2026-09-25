@@ -36,9 +36,8 @@ def classify(course: dict | None, metrics: dict, a: Athlete) -> str:
                 return "vma"
             return "specifique" if ratio < 0.97 else "seuil"
         return "longue" if planned_distance(course) >= 14000 else "footing"
-    z = metrics.get("zones_hr") or {}
-    hard = z.get("Z4 seuil", 0) + z.get("Z5 VO2max", 0)
-    if hard > 0.2:
+    segs = metrics.get("quality_segments") or []
+    if sum(s["duration_s"] for s in segs) >= 60:
         return "qualite_libre"
     return "longue" if (metrics.get("distance_m") or 0) >= 15000 else "footing"
 
@@ -53,6 +52,8 @@ def judge(metrics: dict, a: Athlete, course: dict | None = None, df=None, laps=N
     findings: list[str] = []
     flags: list[str] = []
     score = 10.0
+    libre_subtype: str | None = None
+    libre_segments: list[dict] = []
     z = metrics.get("zones_hr") or {}
     easy_share = z.get("Z1 récup", 0) + z.get("Z2 endurance", 0)
     dec = metrics.get("decoupling") or {}
@@ -125,7 +126,27 @@ def judge(metrics: dict, a: Athlete, course: dict | None = None, df=None, laps=N
             if reps["pace_sd"] is not None and reps["pace_sd"] <= 3 and on == n:
                 findings.append(f"Très régulier : écart-type de {f1(reps['pace_sd'])} s/km entre les répétitions.")
     elif kind == "qualite_libre":
-        findings.append(f"Séance intense hors plan : {1 - easy_share:.0%} du temps au-dessus de Z2.")
+        segs = metrics.get("quality_segments") or []
+        paces = [sg["avg_pace"] for sg in segs if sg.get("avg_pace")]
+        if paces:
+            ratio = min(paces) / a.threshold_pace
+            avg_dist = sum(sg.get("distance_m") or 0 for sg in segs) / len(segs)
+            libre_subtype = ("VMA" if ratio < 0.93 and avg_dist <= 1300 else
+                             "Allure spécifique" if ratio < 0.97 else "Seuil")
+            n, total_m = len(segs), sum(sg.get("distance_m") or 0 for sg in segs)
+            findings.append(f"{n} répétition{'s' if n > 1 else ''} détectée{'s' if n > 1 else ''} dans les données "
+                            f"({fkm(total_m)} au total), {fpace(sum(paces) / len(paces))}/km en moyenne "
+                            f"({libre_subtype.lower()}).")
+            if len(paces) > 1:
+                mean_p = sum(paces) / len(paces)
+                sd = (sum((p - mean_p) ** 2 for p in paces) / len(paces)) ** 0.5
+                findings.append(f"Régularité : écart-type de {f1(sd)} s/km entre les répétitions"
+                                + (" — très homogène." if sd <= 3 else "."))
+            libre_segments = [{"n": i + 1, "duration_s": sg["duration_s"], "distance_m": sg.get("distance_m"),
+                               "pace": sg.get("avg_pace"), "avg_hr": sg.get("avg_hr")} for i, sg in enumerate(segs)]
+        else:
+            libre_subtype, libre_segments = None, []
+            findings.append(f"Séance intense hors plan : {1 - easy_share:.0%} du temps au-dessus de Z2.")
         flags.append("hors_plan")
         score = None
 
@@ -136,8 +157,9 @@ def judge(metrics: dict, a: Athlete, course: dict | None = None, df=None, laps=N
 
     if score is not None:
         score = round(max(0.0, min(10.0, score)), 1)
-    headline = TYPE_FR.get(kind, kind)
+    type_fr = f"{libre_subtype} (hors plan)" if libre_subtype else TYPE_FR.get(kind, kind)
+    headline = type_fr
     if score is not None:
         headline += f" · {score:.1f}/10".replace(".", ",")
-    return {"type": kind, "type_fr": TYPE_FR.get(kind, kind), "score": score, "headline": headline,
-            "findings": findings, "flags": flags, "planned": planned, "reps": reps}
+    return {"type": kind, "type_fr": type_fr, "score": score, "headline": headline,
+            "findings": findings, "flags": flags, "planned": planned, "reps": reps, "segments": libre_segments}

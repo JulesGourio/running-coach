@@ -1,4 +1,5 @@
-"""Match the steps of a planned COROS workout to what was actually run."""
+"""Match the steps of a planned COROS workout to what was actually run, and detect quality efforts
+(fast contiguous stretches) directly from the data — the same idea whether or not there's a plan."""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -7,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 TOLERANCE_S = 3  # s/km of slack around a target pace range
+QUALITY_GATE = 0.88  # fraction of threshold speed a stretch must sustain to count as a "quality" effort (Z3+)
 
 
 @dataclass
@@ -161,6 +163,45 @@ def evaluate_steps(course: dict, df: pd.DataFrame, laps: list[dict], threshold_p
         "fade_s": float(paces[-1] - paces[0]) if len(paces) > 1 else None,
         "method": next((m["source"] for m in matched if m), None),
     }
+
+
+def quality_segments(df: pd.DataFrame, threshold_pace: float, gate: float = QUALITY_GATE,
+                      min_dur_s: float = 15, merge_gap_s: float = 20) -> list[dict]:
+    """Contiguous stretches of sustained fast running (pace at or under `gate` fraction of threshold pace),
+    merging brief dips (GPS/pace noise, well under a real recovery) and dropping stretches too short to be
+    a real rep. This is the "real repetitions" of a session whether or not a plan course exists — it's how
+    an off-plan quality session gets evaluated and typed, and how best-effort extraction (session.py) avoids
+    diluting fast reps with the recovery jog between them."""
+    if df.empty:
+        return []
+    speed = df["speed"].fillna(0).to_numpy()
+    t = df["elapsed"].to_numpy()
+    dist = df["distance"].to_numpy()
+    hr = df["hr"].to_numpy(dtype=float)
+    # a short rolling smooth so one noisy GPS sample doesn't split a rep in two
+    sm = pd.Series(speed).rolling(7, min_periods=1, center=True).mean().to_numpy()
+    gate_speed = gate * 1000 / threshold_pace
+    idx = np.flatnonzero(sm >= gate_speed)
+    if not len(idx):
+        return []
+    spans, start, prev = [], idx[0], idx[0]
+    for i in idx[1:]:
+        if t[i] - t[prev] > merge_gap_s:
+            spans.append((start, prev))
+            start = i
+        prev = i
+    spans.append((start, prev))
+    out = []
+    for s, e in spans:
+        dur = float(t[e] - t[s])
+        if dur < min_dur_s:
+            continue
+        d = float(dist[e] - dist[s])
+        seg_hr = hr[s:e + 1]
+        out.append({"start_idx": int(s), "end_idx": int(e), "duration_s": dur, "distance_m": d,
+                    "avg_pace": dur / d * 1000 if d > 0 else None,
+                    "avg_hr": float(np.nanmean(seg_hr)) if not np.all(np.isnan(seg_hr)) else None})
+    return out
 
 
 def planned_distance(course: dict, easy_pace: float = 360) -> float:

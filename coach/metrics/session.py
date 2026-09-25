@@ -6,6 +6,7 @@ import math
 import numpy as np
 import pandas as pd
 
+from coach.metrics.intervals import quality_segments
 from coach.metrics.zones import HR_ZONES, PACE_ZONES, Athlete, hr_zone_index, speed_zone_index
 
 MOVING_SPEED = 1.2  # m/s; below this the athlete is walking or stopped
@@ -44,30 +45,44 @@ def trimp_hour_at_lthr(a: Athlete) -> float:
     return trimp(np.full(3600, float(a.lt_hr)), a)
 
 
-def best_efforts(t: np.ndarray, dist: np.ndarray) -> dict[str, float]:
-    """Fastest time (s) to cover each standard distance anywhere in the activity."""
-    out = {}
-    if len(dist) < 2:
-        return out
-    for d in BEST_DISTANCES:
-        if dist[-1] - dist[0] < d:
+def best_efforts(t: np.ndarray, dist: np.ndarray, segments: list[dict]) -> dict[str, float]:
+    """Fastest time (s) to cover each standard distance, searched within a single quality segment at a
+    time — never across the recovery between two reps. On a broken-up interval session this is the
+    difference between a real best 1 km and a fake "best 10 km" that's actually the whole session average,
+    recovery jogs included."""
+    out: dict[str, float] = {}
+    for seg in segments:
+        s0, e0 = seg["start_idx"], seg["end_idx"] + 1
+        tt, dd = t[s0:e0], dist[s0:e0]
+        if len(dd) < 2:
             continue
-        j = np.searchsorted(dist, dist + d)
-        ok = j < len(dist)
-        if not ok.any():
-            continue
-        times = t[j[ok]] - t[ok]
-        out[str(d)] = float(times.min())
+        for d in BEST_DISTANCES:
+            if dd[-1] - dd[0] < d:
+                continue
+            j = np.searchsorted(dd, dd + d)
+            ok = j < len(dd)
+            if not ok.any():
+                continue
+            best_t = float((tt[j[ok]] - tt[ok]).min())
+            k = str(d)
+            if k not in out or best_t < out[k]:
+                out[k] = best_t
     return out
 
 
-def best_durations(speed: np.ndarray) -> dict[str, float]:
-    """Best average speed (m/s) held for each duration."""
-    out = {}
-    s = pd.Series(np.nan_to_num(speed))
-    for w in BEST_DURATIONS:
-        if len(s) >= w:
-            out[str(w)] = float(s.rolling(w).mean().max())
+def best_durations(speed: np.ndarray, segments: list[dict]) -> dict[str, float]:
+    """Best average speed (m/s) held for each duration, within a single quality segment at a time (see
+    best_efforts)."""
+    out: dict[str, float] = {}
+    for seg in segments:
+        s0, e0 = seg["start_idx"], seg["end_idx"] + 1
+        sp = pd.Series(np.nan_to_num(speed[s0:e0]))
+        for w in BEST_DURATIONS:
+            if len(sp) >= w:
+                v = float(sp.rolling(w).mean().max())
+                k = str(w)
+                if k not in out or v > out[k]:
+                    out[k] = v
     return out
 
 
@@ -140,6 +155,7 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
 
     rolling_speed = pd.Series(speed).rolling(60, min_periods=30).mean()[moving]
     avg_speed = distance_m / moving_s if moving_s else 0.0
+    segments = quality_segments(df, a.threshold_pace)
     return {
         "distance_m": distance_m,
         "moving_s": moving_s,
@@ -162,6 +178,7 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
         "stride_m": (avg_speed * 60 / avg_cad) if avg_cad else None,
         "ascent_m": ascent,
         "pace_cv": float(rolling_speed.std() / rolling_speed.mean()) if len(rolling_speed.dropna()) > 60 else None,
-        "best_efforts": best_efforts(t, dist),
-        "best_durations": best_durations(speed),
+        "best_efforts": best_efforts(t, dist, segments),
+        "best_durations": best_durations(speed, segments),
+        "quality_segments": segments,
     }
