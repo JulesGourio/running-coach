@@ -33,6 +33,14 @@ Le Plan ID du bloc en cours ne doit jamais être montré à l'utilisateur (contr
 - Les allures dans les séances sont en secondes/km (ex: 4:00/km = 240). Toujours vérifier
   qu'une allure absolue reste dans les bornes 120–1499 s/km avant d'écrire une séance.
 
+## Dashboard
+
+Le dashboard « Carnet de course » (https://claude.ai/artifact/Ceh6AwSUkZkGPjL8kFSdT2, source
+`dashboard/index.html`) lit COROS en direct et garde les notes du coach dans sa base de données
+(outil `ArtifactData`). Pour un check-in ou un bilan, suivre `.claude/skills/checkin/SKILL.md`
+et écrire le résultat dans le dashboard. Les réponses COROS sont du texte : si leur format
+change, adapter les fonctions `parse*` de la page puis republier avec l'URL ci-dessus.
+
 ## Repères de forme (mis à jour au fil des check-ins)
 
 Voir `README.md` pour le snapshot de départ. Lors d'un check-in, mettre à jour le README avec
