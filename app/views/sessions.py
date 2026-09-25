@@ -57,19 +57,20 @@ if not m:
     st.stop()
 
 dec = (m.get("decoupling") or {}).get("decoupling_pct")
+easy_pct = sum((m.get("zones_hr") or {}).get(k_, 0) for k_ in ("Z1 récup", "Z2 endurance")) if m.get("zones_hr") else None
 grid = [
     ("Distance", f"{fnum(m['distance_m'] / 1000, 2)} km", None),
     ("Temps en mouvement", fdur(m["moving_s"]), None),
     ("Allure moyenne", f"{fpace(m['avg_pace'])}/km", None),
-    ("Allure ajustée (NGP)", f"{fpace(m['ngp_pace'])}/km", "Allure équivalente sur plat, lissée : tient compte du dénivelé et des variations."),
     ("FC moyenne", f"{fnum(m['avg_hr'], 0)} bpm", None),
-    ("Charge (rTSS)", fnum(m["rtss"], 0), "100 = une heure à ton allure seuil."),
-    ("TRIMP", fnum(m["trimp"], 0), "Charge cardiaque (Banister)."),
-    ("Efficacité", fnum(m["ef"], 2), "Mètres par minute divisés par la FC : plus c'est haut, plus tu es économique."),
-    ("Découplage", f"{fnum(dec, 1)} %" if dec is not None else "—", "Perte d'efficacité entre la 1re et la 2de moitié. Sous 5 % : endurance solide."),
-    ("Cadence (pas/min)", fnum(m["cadence"], 0), None),
-    ("Foulée", f"{fnum(m['stride_m'], 2)} m", None),
+    ("FC max", f"{fnum(m.get('max_hr'), 0)} bpm", None),
+    ("Temps en endurance", f"{easy_pct:.0%}" if easy_pct is not None else "—", "Part du temps en zones 1 et 2 (FC)."),
     ("Dénivelé +", f"{fnum(m['ascent_m'], 0)} m", None),
+    ("Cadence", f"{fnum(m['cadence'], 0)} pas/min", None),
+    ("Foulée", f"{fnum(m['stride_m'], 2)} m", None),
+    ("Dérive cardiaque", f"{fnum(dec, 1)} %" if dec is not None else "—",
+     "Hausse de la FC à allure égale entre la 1re et la 2de moitié. Sous 5 % : endurance solide."),
+    ("Charge", fnum(m["rtss"], 0), "Intensité × durée : 100 = une heure courue à ton allure seuil."),
 ]
 cols = st.columns(6)
 for i, (k, val, h) in enumerate(grid):

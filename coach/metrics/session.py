@@ -52,6 +52,12 @@ def best_efforts(t: np.ndarray, dist: np.ndarray, segments: list[dict]) -> dict[
     recovery jogs included."""
     out: dict[str, float] = {}
     for seg in segments:
+        if seg.get("source") == "tour":  # a watch lap of (about) that distance: its own time, as in the COROS app
+            for d in BEST_DISTANCES:
+                if abs(seg["distance_m"] - d) <= 0.03 * d:
+                    k, best_t = str(d), seg["duration_s"] * d / seg["distance_m"]
+                    if k not in out or best_t < out[k]:
+                        out[k] = best_t
         s0, e0 = seg["start_idx"], seg["end_idx"] + 1
         tt, dd = t[s0:e0], dist[s0:e0]
         if len(dd) < 2:
@@ -189,6 +195,7 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
     segments = quality_segments(df, a.threshold_pace, laps=laps)
     for sg in segments:  # mean slope of each rep, to recognise hill repeats
         sg["grade"] = float(np.mean(grade[sg["start_idx"]:sg["end_idx"] + 1])) if sg["end_idx"] >= sg["start_idx"] else 0.0
+    flat = [sg for sg in segments if sg["grade"] > -0.03]  # a downhill stretch isn't a best effort
     return {
         "distance_m": distance_m,
         "moving_s": moving_s,
@@ -211,8 +218,8 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
         "stride_m": (avg_speed * 60 / avg_cad) if avg_cad else None,
         "ascent_m": ascent,
         "pace_cv": float(rolling_speed.std() / rolling_speed.mean()) if len(rolling_speed.dropna()) > 60 else None,
-        "best_efforts": best_efforts(t, dist, segments),
-        "best_durations": best_durations(speed, segments),
+        "best_efforts": best_efforts(t, dist, flat),
+        "best_durations": best_durations(speed, flat),
         "quality_segments": segments,
         "hr_speed": hr_speed_fit(hr, gap_speed, moving, segments) if has_hr else None,
     }

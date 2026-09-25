@@ -112,7 +112,11 @@ def describe_done(metrics: dict, a: Athlete, sport_type: int | None = None) -> d
             cat = "Récupération"
         else:
             cat = "Footing"
-        return {"category": cat, "structure": "", "label": f"{cat}{suffix} · {_dist(dist)}" if dist else cat + suffix}
+        sprint = max((s for s in metrics.get("quality_segments") or [] if s.get("avg_pace") and s["duration_s"] >= 30
+                      and s["avg_pace"] < thr * 0.8), key=lambda s: s["distance_m"], default=None)
+        extra = f" + sprint {_dist(sprint['distance_m'])}" if sprint and cat != "Footing + accélérations" else ""
+        return {"category": cat, "structure": extra.strip(" +"),
+                "label": (f"{cat}{suffix} · {_dist(dist)}" if dist else cat + suffix) + extra}
     r = _median([s["avg_pace"] for s in work]) / thr
     d_med = _median([s["duration_s"] for s in work])
     n = len(work)

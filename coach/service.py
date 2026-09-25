@@ -141,7 +141,7 @@ def progress(db: DB, s: Settings) -> dict:
         (never below the paces actually run), else the paces run, else COROS threshold pace."""
         t = latest_vma_test(db, end)
         if t:
-            return t["vma"], "test", {}
+            return t["vma"], "manuel" if t["kind"] == "manuel" else "test", {}
         paces = prog.estimate_vma(rep_sessions, a.threshold_pace, a.hr_max, end)
         cardio = prog.vma_from_hr_fits(hr_fits, a.hr_max, end)
         detail = {"paces": paces, "cardio": cardio}
@@ -167,9 +167,11 @@ def progress(db: DB, s: Settings) -> dict:
     preds = {}
     if v_ret:
         preds[f"VMA retenue ({VMA_SOURCES[source]})"] = prog.predict_from_vma(v_ret, D)
-    if last_fit.get("p10") and source != "test":
+    # COROS and threshold pace always stay in: converting a VMA to a 10 km time assumes an endurance level (~90 %
+    # of VMA held for 40 min) that isn't measured, so no single VMA should decide the prediction alone.
+    if last_fit.get("p10"):
         preds["COROS"] = last_fit["p10"]
-    if seuil and source not in ("test", "seuil"):
+    if seuil and source != "seuil":
         preds["Allure seuil COROS"] = prog.predict_from_vma(seuil, D)
     estimate = float(np.median(list(preds.values()))) if preds else None
 
@@ -207,7 +209,7 @@ def progress(db: DB, s: Settings) -> dict:
             "prediction_series": series, "projection": proj, "probabilities": probs}
 
 
-VMA_SOURCES = {"test": "test", "cardio": "FC-vitesse", "fractionnes": "allures des fractionnés", "seuil": "seuil COROS"}
+VMA_SOURCES = {"test": "test", "manuel": "fixée par toi", "cardio": "FC-vitesse", "fractionnes": "allures des fractionnés", "seuil": "seuil COROS"}
 TEST_VALID_DAYS = 70
 
 

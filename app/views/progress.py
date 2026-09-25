@@ -15,7 +15,7 @@ pr = service.progress(db, s)
 a = pr["athlete"]
 vma, est, proj = pr["vma"], pr["estimate"], pr["projection"]
 kmh = lambda v: f"{fnum(v * 3.6, 1)} km/h" if v else "—"  # noqa: E731
-SOURCE_TXT = {"test": "ton test", "cardio": "la relation FC-vitesse de ta meilleure séance",
+SOURCE_TXT = {"test": "ton test", "manuel": "la valeur que tu as fixée", "cardio": "la relation FC-vitesse de ta meilleure séance",
               "fractionnes": "les allures de tes fractionnés", "seuil": "ton allure seuil COROS"}
 
 # ---- VMA ------------------------------------------------------------------------------------------------
@@ -28,7 +28,7 @@ with c1:
 with c2:
     src = vma.get("source")
     st.markdown(f"Retenue d'après **{SOURCE_TXT.get(src, src)}**.")
-    if src == "test":
+    if src in ("test", "manuel"):
         t = vma["test"]
         st.caption(f"Test du {fdate(t['date'])} ({t['detail']}). Il prime sur les estimations pendant 10 semaines.")
     else:

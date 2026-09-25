@@ -16,8 +16,8 @@ days = st.segmented_control("Période", [42, 90, 180], default=90, format_func=l
 m = model.tail(days)
 
 fig = go.Figure()
-fig.add_scatter(x=m.index, y=m["ctl"], name="Forme (CTL, 42 j)", line=dict(color=BLUE, width=2))
-fig.add_scatter(x=m.index, y=m["atl"], name="Fatigue (ATL, 7 j)", line=dict(color=ORANGE, width=2))
+fig.add_scatter(x=m.index, y=m["ctl"], name="Forme (6 semaines)", line=dict(color=BLUE, width=2))
+fig.add_scatter(x=m.index, y=m["atl"], name="Fatigue (7 jours)", line=dict(color=ORANGE, width=2))
 style(fig, 300).update_layout(title="Forme et fatigue")
 st.plotly_chart(fig, width="stretch")
 
@@ -26,7 +26,7 @@ fig = go.Figure(go.Bar(x=m.index, y=m["tsb"], marker_color=[BLUE if v >= 0 else 
                        name="Fraîcheur", hovertemplate="%{x|%d %b} : %{y:.0f}<extra></extra>"))
 fig.add_hrect(y0=-30, y1=-10, fillcolor=BAND, line_width=0, annotation_text="zone d'entraînement productive",
               annotation_position="bottom left", annotation_font_color=MUTED)
-style(fig, 260).update_layout(title="Fraîcheur (TSB = forme − fatigue)", showlegend=False)
+style(fig, 260).update_layout(title="Fraîcheur (forme − fatigue)", showlegend=False)
 c1.plotly_chart(fig, width="stretch")
 
 fig = go.Figure(go.Scatter(x=m.index, y=m["acwr"], line=dict(color=BLUE, width=2), name="Ratio",
@@ -38,9 +38,6 @@ style(fig, 260).update_layout(title="Ratio charge aiguë / chronique", showlegen
 c2.plotly_chart(fig, width="stretch")
 
 with st.container(horizontal=True):
-    st.metric("Monotonie (7 j)", fnum(lm["monotony"], 2), border=True,
-              help="Au-dessus de 2 : charge trop uniforme, manque de vraies journées faciles.")
-    st.metric("Contrainte (7 j)", fnum(lm["strain"], 0), border=True, help="Charge de la semaine × monotonie (Foster).")
     st.metric("Charge 7 derniers jours", fnum(model["load"].tail(7).sum(), 0), border=True,
               chart_data=model["load"].tail(28).tolist(), chart_type="bar")
 

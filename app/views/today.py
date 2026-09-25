@@ -39,7 +39,7 @@ with st.container(horizontal=True):
         st.metric("Chances d'y arriver", f"A {probs.get('A', 0):.0%} · B {probs.get('B', 0):.0%}", border=True,
                   help="Probabilité que la projection passe sous chaque objectif, compte tenu de la fourchette.")
     if vma.get("retenue"):
-        src = {"test": "test", "cardio": "FC-vitesse", "fractionnes": "allures", "seuil": "seuil COROS"}[vma["source"]]
+        src = {"test": "test", "manuel": "fixée par toi", "cardio": "FC-vitesse", "fractionnes": "allures", "seuil": "seuil COROS"}[vma["source"]]
         st.metric("VMA retenue", f"{fnum(vma['retenue'] * 3.6, 1)} km/h", border=True,
                   delta=f"{fpace(1000 / vma['retenue'])}/km · {src}", delta_color="off",
                   help="Vitesse maximale aérobie. Un test récent prime ; sinon la relation FC-vitesse de ta meilleure "
@@ -98,20 +98,18 @@ st.subheader("Charge d'entraînement", divider="gray")
 coros_load = next((d for d in reversed(db.daily()) if d.get("load_ratio")), None)
 acwr = coros_load["load_ratio"] if coros_load else now.get("acwr")
 with st.container(horizontal=True):
-    st.metric("Forme (CTL)", fnum(now.get("ctl"), 0), border=True, chart_data=model_tail["ctl"].tolist(), chart_type="line",
+    st.metric("Forme", fnum(now.get("ctl"), 0), border=True, chart_data=model_tail["ctl"].tolist(), chart_type="line",
               help="Moyenne pondérée de la charge sur 42 jours : ce que ton corps a assimilé.")
-    st.metric("Fatigue (ATL)", fnum(now.get("atl"), 0), border=True, chart_data=model_tail["atl"].tolist(), chart_type="line",
+    st.metric("Fatigue", fnum(now.get("atl"), 0), border=True, chart_data=model_tail["atl"].tolist(), chart_type="line",
               help="Moyenne pondérée de la charge sur 7 jours.")
-    st.metric("Fraîcheur (TSB)", fnum(now.get("tsb"), 0), border=True, chart_data=model_tail["tsb"].tolist(), chart_type="line",
+    st.metric("Fraîcheur", fnum(now.get("tsb"), 0), border=True, chart_data=model_tail["tsb"].tolist(), chart_type="line",
               help="Forme moins fatigue, la veille. Sous -20 : fatigue élevée. Entre +5 et +15 : frais pour une course.")
     st.metric("Ratio de charge (COROS)" if coros_load else "Ratio aigu/chronique", fnum(acwr, 2), border=True,
               delta=("zone optimale" if acwr is not None and 0.8 <= acwr <= 1.3 else "à surveiller" if acwr and acwr > 1.3 else "charge basse")
               if acwr is not None and acwr == acwr else None,
               delta_color="normal" if acwr is not None and acwr == acwr and 0.8 <= acwr <= 1.3 else "inverse",
               help="Charge des 7 derniers jours / moyenne sur 28 jours. Zone optimale 0,8-1,3 ; au-dessus de 1,5 plusieurs jours : on allège.")
-    st.metric("Monotonie", fnum(lm["monotony"], 1), border=True,
-              help="Moyenne / écart-type de la charge sur 7 jours. Au-dessus de 2 : semaines trop uniformes, peu de vraie récupération.")
-st.caption("Forme, fatigue et fraîcheur sont calculées sur la course à pied seulement (charge rTSS). Le ratio de charge "
+st.caption("Forme, fatigue et fraîcheur sont calculées sur la course à pied seulement (intensité × durée). Le ratio de charge "
            "vient de COROS, qui compte tous tes sports, randonnée comprise : c'est lui qui sert de garde-fou.")
 
 # ---- Alerts ----------------------------------------------------------------------------------------

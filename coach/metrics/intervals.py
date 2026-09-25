@@ -207,8 +207,9 @@ def segments_from_laps(df: pd.DataFrame, laps: list[dict], threshold_pace: float
             else:
                 groups.append([lp])
         prev_fast = fast
-    if len(groups) < 1 or (len(groups) == 1 and not tagged and len(laps) > 3):
-        return None
+    auto = lambda lp: abs((lp.get("distance_m") or 0) - 1000) < 40 or abs((lp.get("distance_m") or 0) - 1609) < 60  # noqa: E731
+    if not groups or (len(groups) == 1 and not tagged and all(auto(lp) for lp in groups[0])):
+        return None  # one fast auto-lap in an easy run: not a rep
     out = []
     for g in groups:
         d = sum(lp["distance_m"] for lp in g)
@@ -242,6 +243,7 @@ def quality_segments(df: pd.DataFrame, threshold_pace: float, gate: float = QUAL
     t = df["elapsed"].to_numpy()
     dist = df["distance"].to_numpy()
     hr = df["hr"].to_numpy(dtype=float)
+    cad = df["cadence"].to_numpy(dtype=float) if "cadence" in df else np.full(len(df), np.nan)
     # a short rolling smooth so one noisy GPS sample doesn't split a rep in two
     sm = pd.Series(speed).rolling(5, min_periods=1, center=True).mean().to_numpy()
     gate_speed = gate * 1000 / threshold_pace
@@ -266,8 +268,8 @@ def quality_segments(df: pd.DataFrame, threshold_pace: float, gate: float = QUAL
         if dur < min_dur_s:
             continue
         d = float(dist[e] - dist[s])
-        if d > 150 and dur / d * 1000 < 170:  # > 21 km/h held over 150 m: a GPS jump, not a rep
-            continue
+        if d > 150 and dur / d * 1000 < 170 and np.nanmean(cad[s:e + 1]) < 170:
+            continue  # > 21 km/h at a jogging cadence: a GPS jump, not a sprint (a real one is ~180+ steps/min)
         out.append({"start_idx": int(s), "end_idx": int(e), "duration_s": dur, "distance_m": d,
                     "avg_pace": dur / d * 1000 if d > 0 else None, "source": "flux",
                     "avg_hr": _hr_mean(hr, s, e)})
