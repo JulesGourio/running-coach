@@ -9,7 +9,10 @@ import pandas as pd
 from coach.metrics.intervals import quality_segments
 from coach.metrics.zones import HR_ZONES, PACE_ZONES, Athlete, hr_zone_index, speed_zone_index
 
-MOVING_SPEED = 1.2  # m/s; below this the athlete is walking or stopped
+MOVING_SPEED = 0.8  # m/s of effort (grade-adjusted): below this the athlete is stopped. Low enough that a steep
+# hike or a walked recovery counts as moving, like the COROS timer does; a stop with GPS drift doesn't.
+GRADE_BINS = [(-1, -0.15, "< -15 %"), (-0.15, -0.08, "-15 à -8 %"), (-0.08, -0.03, "-8 à -3 %"), (-0.03, 0.03, "plat"),
+              (0.03, 0.08, "3 à 8 %"), (0.08, 0.15, "8 à 15 %"), (0.15, 0.25, "15 à 25 %"), (0.25, 1, "> 25 %")]
 BEST_DISTANCES = [400, 1000, 1609, 3000, 5000, 10000, 21097]
 RECORD_DISTANCES = [400, 1000, 1609, 3000, 5000, 10000, 15000, 21097, 30000, 42195]
 BEST_DURATIONS = [180, 360, 720, 1200, 1800]
@@ -202,9 +205,9 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
     hr = df["hr"].to_numpy(dtype=float)
     t = df["elapsed"].to_numpy()
     dist = df["distance"].to_numpy()
-    moving = speed > MOVING_SPEED
     grade = grade_series(df)
     gap_speed = speed * minetti_factor(grade)
+    moving = np.maximum(speed, gap_speed) > MOVING_SPEED
 
     moving_s = float(moving.sum())
     distance_m = float(session.get("distance_m") or (dist[-1] - dist[0]))
@@ -233,9 +236,18 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
     avg_cad = float(cad_m.mean()) if len(cad_m) else None
     alt = df["altitude"]
     ascent = session.get("ascent_m")
-    if ascent is None and alt.notna().any():
-        sm = alt.interpolate(limit_direction="both").rolling(15, center=True, min_periods=1).mean().diff()
-        ascent = float(sm[sm > 0].sum())
+    descent = session.get("descent_m")
+    climb_rate = None
+    if alt.notna().any():
+        sm = alt.interpolate(limit_direction="both").rolling(15, center=True, min_periods=1).mean().diff().fillna(0)
+        if ascent is None:
+            ascent = float(sm[sm > 0].sum())
+        if descent is None:
+            descent = float(-sm[sm < 0].sum())
+        up = moving & (grade > 0.05)
+        if up.sum() > 300:  # vertical metres per hour while climbing
+            climb_rate = float(sm.to_numpy()[up].clip(min=0).sum() / up.sum() * 3600)
+    flat_equiv = float(gap_speed[moving].sum()) if moving.any() else 0.0  # distance on flat ground for the same effort
 
     rolling_speed = pd.Series(speed).rolling(60, min_periods=30).mean()[moving]
     avg_speed = distance_m / moving_s if moving_s else 0.0
@@ -264,6 +276,11 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
         "cadence": avg_cad,
         "stride_m": (avg_speed * 60 / avg_cad) if avg_cad else None,
         "ascent_m": ascent,
+        "descent_m": descent,
+        "climb_rate": climb_rate,
+        "effort_pace": moving_s * 1000 / flat_equiv if flat_equiv > 100 else None,
+        "splits": km_splits(df, grade, moving),
+        "grade_bins": grade_bins(speed, grade, moving),
         "pace_cv": float(rolling_speed.std() / rolling_speed.mean()) if len(rolling_speed.dropna()) > 60 else None,
         "best_efforts": best_efforts(t, dist, flat),
         "records": records(t, dist, cad, df["altitude"].to_numpy(dtype=float)),
@@ -272,3 +289,43 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
         "quality_segments": segments,
         "hr_speed": hr_speed_fit(hr, gap_speed, moving, segments) if has_hr else None,
     }
+
+
+def km_splits(df: pd.DataFrame, grade: np.ndarray, moving: np.ndarray) -> list[dict]:
+    """One row per km: moving time, pace, effort pace (grade-adjusted), climb, descent, mean grade, HR."""
+    dist = df["distance"].ffill().fillna(0).to_numpy()
+    if not len(dist) or dist[-1] < 500:
+        return []
+    speed = df["speed"].fillna(0).to_numpy()
+    gap = speed * minetti_factor(grade)
+    alt = df["altitude"].interpolate(limit_direction="both").rolling(15, center=True, min_periods=1).mean().diff().fillna(0).to_numpy()         if df["altitude"].notna().any() else np.zeros(len(df))
+    hr = df["hr"].to_numpy(dtype=float)
+    km = (dist // 1000).astype(int)
+    out = []
+    for k in range(int(km.max()) + 1):
+        w = (km == k)
+        mv = w & moving
+        length = float(min(dist[w].max(), (k + 1) * 1000) - k * 1000) if w.any() else 0
+        if length < 200 or mv.sum() < 30:
+            continue
+        t_ = float(mv.sum())
+        flat = float(gap[mv].sum())
+        out.append({"km": k + 1, "length": length, "time_s": t_, "pace": t_ * 1000 / length,
+                    "effort_pace": t_ * 1000 / flat if flat > 50 else None,
+                    "up": float(alt[w].clip(min=0).sum()), "down": float(-alt[w].clip(max=0).sum()),
+                    "grade": float(alt[w].sum() / length), "hr": float(np.nanmean(hr[mv])) if not np.isnan(hr[mv]).all() else None})
+    return out
+
+
+def grade_bins(speed: np.ndarray, grade: np.ndarray, moving: np.ndarray) -> list[dict]:
+    """Time share and average speed by slope class: how fast you climb and descend."""
+    tot = moving.sum()
+    if tot < 300:
+        return []
+    out = []
+    for lo, hi, name in GRADE_BINS:
+        w = moving & (grade >= lo) & (grade < hi)
+        if w.sum() >= 30:
+            out.append({"name": name, "share": float(w.sum() / tot), "speed": float(speed[w].mean()),
+                        "vert_m_h": float((speed[w] * grade[w]).mean() * 3600)})
+    return out
