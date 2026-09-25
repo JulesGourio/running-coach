@@ -37,7 +37,8 @@ Le Plan ID du bloc en cours ne doit jamais être montré à l'utilisateur (contr
 
 Package Python `coach/` (voir README). En local, le serveur MCP `running-coach` (déclaré dans `.mcp.json`)
 expose les analyses calculées à partir des fichiers FIT : `resume`, `seances`, `analyse_seance`,
-`progression`, `charge`, `plan`, `modifications_plan`, `enregistrer_verdict`, `synchroniser`.
+`progression`, `charge`, `plan`, `alertes`, `bilan_semaine`, `modifications_plan`, `enregistrer_verdict`,
+`synchroniser`. Pour un bilan de semaine, commence par `bilan_semaine` et `alertes`.
 
 Le type de chaque séance vient de ce qui a été couru (tours de la montre sinon flux GPS), pas du plan ;
 la note sur 10 n'existe que pour une séance prévue (respect du plan). VMA : un test saisi prime, sinon la
