@@ -119,6 +119,38 @@ if preds:
     st.dataframe(pd.DataFrame([{"Méthode": k_, "Temps": fdur(v), "Allure": f"{fpace(v / 10)}/km"} for k_, v in preds.items()]),
                  hide_index=True)
 
+# ---- every distance --------------------------------------------------------------------------------------
+st.subheader("Toutes les distances", divider="gray")
+allp = service.predictions_all(db, s, pr)
+st.dataframe(pd.DataFrame([{
+    "Distance": r["distance"], "Estimation": fdur(r["estimate"]) if r["estimate"] else "—",
+    "Allure": f"{fpace(r['pace'])}/km" if r["pace"] else "—",
+    **{k: fdur(v) for k, v in r["methods"].items()},
+    "Ta meilleure sortie": f"{fdur(r['real']['time'])} ({fdate(r['real']['date'])})" if r["real"] else "—"} for r in allp]),
+    hide_index=True, width="stretch")
+st.caption("Estimation = médiane des méthodes. Au-delà du 10 km, l'endurance compte autant que la VMA : les méthodes "
+           "fondées sur la VMA supposent une endurance de coureur entraîné sur la distance, ta meilleure sortie réelle "
+           "(pas forcément à fond) sert de repère.")
+
+# ---- goals A/B week by week ------------------------------------------------------------------------------
+track = service.goal_track(db, s, pr)
+if track:
+    st.subheader("Suivi des objectifs, semaine par semaine", divider="gray")
+    tk = pd.DataFrame(track)
+    tk["week"] = pd.to_datetime(tk["week"])
+    fig = go.Figure()
+    fig.add_scatter(x=tk["week"], y=tk["A"] * 100, mode="lines+markers", name=f"Objectif A ({fdur(s.goal_a)})",
+                    line=dict(color=CRIT, width=2), hovertemplate="%{x|%d %b} : %{y:.0f} %<extra>A</extra>")
+    fig.add_scatter(x=tk["week"], y=tk["B"] * 100, mode="lines+markers", name=f"Objectif B ({fdur(s.goal_b)})",
+                    line=dict(color=GOOD, width=2), hovertemplate="%{x|%d %b} : %{y:.0f} %<extra>B</extra>")
+    style(fig, 280).update_layout(title="Chances d'atteindre chaque objectif (%)", yaxis=dict(range=[0, 100], ticksuffix=" %"))
+    st.plotly_chart(fig, width="stretch")
+    st.dataframe(pd.DataFrame([{"Semaine du": fdate(r["week"]), "10 km estimé": fdur(r["estimate"]),
+                                "Projection jour J": f"{fdur(r['projected'])} ({fdur(r['low'])}–{fdur(r['high'])})",
+                                "Chances A": f"{(r['A'] or 0):.0%}", "Chances B": f"{(r['B'] or 0):.0%}"} for r in reversed(track)]),
+                 hide_index=True, width="stretch")
+    st.caption("Un point par semaine, enregistré quand tu ouvres l'appli : la courbe se construit au fil de la préparation.")
+
 # ---- rep paces over time -------------------------------------------------------------------------------
 trend = pd.DataFrame([r for r in pr.get("rep_trend") or [] if not r["category"].startswith("Sortie longue")])
 if len(trend):

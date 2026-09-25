@@ -28,6 +28,7 @@ for x in al.alerts(db, s):
 
 # ---- Where you stand vs the goal -------------------------------------------------------------------
 pr = service.progress(db, s)
+service.goal_track(db, s, pr)  # records this week's point of the A/B tracking
 est, proj, probs, vma = pr["estimate"], pr["projection"], pr["probabilities"], pr["vma"]
 with st.container(horizontal=True):
     if est:

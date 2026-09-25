@@ -252,6 +252,53 @@ def delete_vma_test(db: DB, day: str) -> None:
     db.set_meta("vma_tests", json.dumps([t for t in vma_tests(db) if t["date"] != day]))
 
 
+RACE_DISTANCES = {"5 km": (5000, "p5"), "10 km": (10000, "p10"), "Semi-marathon": (21097, "half"), "Marathon": (42195, "marathon")}
+
+
+def predictions_all(db: DB, s: Settings, pr: dict | None = None) -> list[dict]:
+    """5 km to marathon: from the retained VMA, from COROS threshold pace, COROS's own predictions, the median of
+    those, and the best real run at that distance for reference."""
+    from coach import history as hist
+    pr = pr or progress(db, s)
+    vma = pr["vma"]
+    fit = next((f for f in reversed(db.fitness()) if f.get("p10")), {})
+    df = hist.frame(db)
+    real = {b["distance"]: b for b in hist.best_by_distance(df)} if not df.empty else {}
+    out = []
+    for name, (dist, key) in RACE_DISTANCES.items():
+        m = {}
+        if vma.get("retenue"):
+            m["VMA retenue"] = prog.predict_from_vma(vma["retenue"], dist)
+        if vma.get("seuil"):
+            m["Seuil COROS"] = prog.predict_from_vma(vma["seuil"], dist)
+        if fit.get(key):
+            m["COROS"] = fit[key]
+        est = float(np.median(list(m.values()))) if m else None
+        r = real.get(name)
+        out.append({"distance": name, "meters": dist, "methods": m, "estimate": est,
+                    "pace": est / (dist / 1000) if est else None,
+                    "real": {"time": r["time"], "date": r["date"].isoformat(), "pace": r["pace"]} if r else None})
+    return out
+
+
+def goal_track(db: DB, s: Settings, pr: dict | None = None) -> list[dict]:
+    """Week-by-week record of the estimate, the race-day projection and the chances for goals A and B. The
+    current week is (re)written on each call, so the history builds up week after week (earlier weeks aren't
+    reconstructed: the estimate combines methods whose past values aren't all known)."""
+    pr = pr or progress(db, s)
+    track = {t["week"]: t for t in json.loads(db.get_meta("goal_track") or "[]")}
+    goal_day = date.fromisoformat(s.goal_date) if s.goal_date else None
+    proj = pr["projection"]
+    if proj and pr["estimate"]:
+        today = date.today()
+        wk = (today - timedelta(days=today.weekday())).isoformat()
+        track[wk] = {"week": wk, "estimate": pr["estimate"], "projected": proj["projected"], "low": proj["low"],
+                     "high": proj["high"], "A": pr["probabilities"].get("A"), "B": pr["probabilities"].get("B"), "source": "mesuré"}
+    rows = sorted(track.values(), key=lambda t: t["week"])
+    db.set_meta("goal_track", json.dumps(rows))
+    return rows
+
+
 def plan_view(db: DB, s: Settings, back: int = 14, ahead: int = 14) -> list[dict]:
     a = athlete(db, s)
     today = date.today()
@@ -307,6 +354,9 @@ def overview(db: DB, s: Settings) -> dict:
         "projection": pr["projection"],
         "probabilites": pr["probabilities"],
         "vma_m_s": pr["vma"],
+        "predictions_distances": [{"distance": r["distance"], "estimation_s": round(r["estimate"]) if r["estimate"] else None,
+                                   "methodes_s": {k: round(v) for k, v in r["methods"].items()}, "meilleure_reelle": r["real"]}
+                                  for r in predictions_all(db, s, pr)],
         "dernieres_seances": [{k: r[k] for k in ("label_id", "date", "name", "kind_fr", "score", "findings", "distance_km")}
                               for r in sessions(db, 14)],
         "a_venir": [p for p in plan_view(db, s, back=0, ahead=10) if p["status"] == "à venir"],
