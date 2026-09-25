@@ -1,4 +1,4 @@
-from coach.metrics.intervals import quality_segments
+from coach.metrics.intervals import flatten_course, is_quality, quality_segments
 from coach.metrics.session import best_durations, best_efforts
 from tests.synth import build, vo2_segments
 
@@ -50,3 +50,15 @@ def test_best_durations_restricted_to_a_single_segment():
     # spanning into the recovery, i.e. diluting the average).
     assert "180" in bd
     assert "360" not in bd
+
+
+def test_strides_on_an_easy_run_are_not_quality_reps():
+    course = {"courseName": "Footing + accelerations", "sportType": 1, "sections": [
+        {"sectionType": 2, "targetType": 1, "targetValue": 9000, "intensityType": 2,
+         "intensityValueStart": 300, "intensityValueEnd": 335},
+        {"intervalGroup": True, "repeats": 6, "sets": [
+            {"sectionType": 2, "targetType": 1, "targetValue": 100, "intensityType": 2,
+             "intensityValueStart": 190, "intensityValueEnd": 210},
+            {"sectionType": 3, "targetType": 2, "targetValue": 60, "intensityType": 2,
+             "intensityValueStart": 400, "intensityValueEnd": 450}]}]}
+    assert not any(is_quality(st, 262) for st in flatten_course(course))

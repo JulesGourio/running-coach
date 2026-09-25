@@ -52,8 +52,9 @@ def analyse_seance(label_id: str) -> dict:
 
 @server.tool()
 def progression() -> dict:
-    """Indicateurs de progrès : allure à FC de référence, efficacité, meilleurs efforts sur 90 jours,
-    vitesse critique, prédictions (COROS, vitesse critique, Riegel, VDOT), projection et probabilités d'objectif."""
+    """Indicateurs de progrès : allure à FC de référence, efficacité, meilleurs efforts sur 90 jours, VMA estimée
+    (fractionnés, seuil COROS, VO2max), prédictions 10 km (fractionnés, COROS, seuil) et leur médiane, projection
+    au jour J et probabilités d'objectif."""
     s, db = _ctx()
     p = service.progress(db, s)
     p.pop("ef_rows", None)

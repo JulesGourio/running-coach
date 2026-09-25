@@ -47,9 +47,16 @@ def flatten_course(course: dict) -> list[Step]:
     return steps
 
 
+def is_stride(step: Step) -> bool:
+    """Short accelerations tacked onto an easy run (under 200 m or 40 s): not a quality rep."""
+    return bool(step.target_value) and ((step.target_type == 1 and step.target_value < 200)
+                                        or (step.target_type == 2 and step.target_value < 40))
+
+
 def is_quality(step: Step, threshold_pace: float) -> bool:
-    """A work step whose target is faster than easy running (about 115 % of threshold pace)."""
-    return step.kind == "work" and step.pace_hi is not None and step.pace_hi < threshold_pace * 1.15
+    """A work step whose target is faster than easy running (about 115 % of threshold pace), strides excluded."""
+    return (step.kind == "work" and step.pace_hi is not None and step.pace_hi < threshold_pace * 1.15
+            and not is_stride(step))
 
 
 def _fits(lap: dict, st: Step) -> bool:

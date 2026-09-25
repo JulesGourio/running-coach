@@ -75,9 +75,16 @@ directement dans ton calendrier.
 - **Ratio charge aiguë / chronique**, monotonie et contrainte (Foster).
 - **Répartition facile / tempo / intense** par semaine (repère : environ 80 % facile).
 - **Allure à FC fixe** sur les footings : l'indicateur le plus fiable de progrès aérobie.
-- **Vitesse critique et D'**, **VDOT**, **Riegel**, comparés à la prédiction COROS.
-- **Projection au jour de la course** et probabilité d'atteindre les objectifs A et B.
-  C'est une estimation statistique, plafonnée à 1 % de progrès par semaine.
+- **VMA estimée à partir des fractionnés** : les répétitions sont isolées de la récupération, puis chacune est
+  ramenée à la VMA selon sa durée (un 400 m se court vers 105 % de VMA, un 1000 m vers 98 %). On retient la
+  moyenne des deux meilleures séances des 6 dernières semaines ; les séances où la FC n'approche jamais le max
+  sont ignorées. Recoupée avec l'allure seuil COROS (seuil ≈ 87 % de VMA) et la VO2max COROS (≈ 3,5 × VMA).
+- **10 km estimé** : médiane de trois estimations (VMA des fractionnés, prédiction COROS, allure seuil COROS),
+  la VMA étant convertie en temps de course selon la part tenable sur la durée (~90 % sur 40 min).
+  Il n'y a ni course ni effort continu 5/10 km dans les données : Riegel, VDOT et vitesse critique sur les
+  « meilleurs efforts » donnaient des résultats faux et ne sont plus utilisés.
+- **Projection au jour de la course** et probabilité d'atteindre les objectifs A et B : niveau actuel amélioré
+  d'un gain hebdomadaire (tendance récente si elle est nette, sinon 0,4 %/semaine), plafonné à 0,8 %/semaine.
 - **Disponibilité du jour** (vert, orange, rouge) à partir de la VFC et de la FC de repos (comparées à tes
   4 dernières semaines), du sommeil et de la fraîcheur, avec un conseil sur la séance prévue.
 
@@ -123,13 +130,21 @@ est exclu de git.
 ## Objectif et plan en cours
 
 - 10 km le dimanche 13 décembre 2026. Objectif A : sub-40:00. Objectif B : 41:00 à 41:30.
-- Forme au 25 septembre 2026 : VO2max 60, allure seuil 4:22/km, prédiction COROS 43:26.
-- Plan de 11 semaines dans le calendrier COROS (28 septembre → 13 décembre), 5 séances par semaine,
-  repos le lundi et le vendredi :
+- Forme au 25 septembre 2026 : VO2max 60, allure seuil 4:22/km, prédiction COROS 43:26,
+  VMA estimée sur les fractionnés 15,3 km/h, 10 km estimé 43:26, projection au 13 décembre 41:30
+  (fourchette 40:07-42:56).
+- Plan de 11 semaines dans le calendrier COROS (28 septembre → 13 décembre), réécrit le 25 septembre à la
+  demande de Jules (le premier jugé trop facile ; il a déjà tenu cette charge pour un marathon) :
+  5 séances par semaine dont 3 de qualité (VMA le mardi, seuil ou allure 10 km le jeudi, sortie longue avec
+  allure le dimanche), footings en Z2 le mercredi et le samedi (avec accélérations), repos lundi et vendredi.
+  Volume d'environ 58 km en semaine 1 à ~70 km en semaines 6-7, assimilation en semaines 4 et 8,
+  affûtage en 10-11.
   1. Base (semaines 1 à 3)
   2. Développement (semaines 4 à 7)
   3. Spécifique (semaines 8 à 10)
   4. Course (semaine 11)
+- Garde-fou : ratio de charge COROS > 1,5 plusieurs jours de suite ou VFC durablement basse → alléger la
+  semaine suivante.
 
 ## Suivi automatique
 

@@ -1,7 +1,7 @@
 """Rule-based judgement of a session: type, score out of 10 and findings with numbers."""
 from __future__ import annotations
 
-from coach.metrics.intervals import evaluate_steps, flatten_course, is_quality, planned_distance
+from coach.metrics.intervals import evaluate_steps, flatten_course, is_quality, is_stride, planned_distance
 from coach.metrics.zones import Athlete
 
 
@@ -29,7 +29,8 @@ def classify(course: dict | None, metrics: dict, a: Athlete) -> str:
         if q:
             if len(q) < len([st for st in steps if st.kind == "work"]) and planned_distance(course) >= 14000:
                 return "longue_specifique"
-            ratio = min(st.pace_lo for st in q) / a.threshold_pace
+            # middle of the target range: a seuil block written 4:12-4:22 is still seuil, not 10 km pace
+            ratio = min((st.pace_lo + st.pace_hi) / 2 for st in q) / a.threshold_pace
             rep_m = max(st.target_value if st.target_type == 1 else st.target_value * 1000 / st.pace_hi
                         for st in q if st.target_value)
             if ratio < 0.93 and rep_m <= 1300:
@@ -104,7 +105,7 @@ def judge(metrics: dict, a: Athlete, course: dict | None = None, df=None, laps=N
             else:
                 findings.append(f"Intensité respectée : {easy_share:.0%} du temps en zone facile.")
         if course:
-            lo = min((st.pace_lo for st in flatten_course(course) if st.pace_lo), default=None)
+            lo = min((st.pace_lo for st in flatten_course(course) if st.pace_lo and not is_stride(st)), default=None)
             if lo and metrics.get("avg_pace") and metrics["avg_pace"] < lo - 10:
                 score -= 1.5
                 findings.append(f"Allure moyenne {fpace(metrics['avg_pace'])}/km, plus rapide que la fourchette prévue "

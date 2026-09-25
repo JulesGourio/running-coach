@@ -3,7 +3,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from coach import service
-from common import BLUE, MUTED, ORANGE, ctx, fdate, fdur, fnum, fpace, pace_ticks, style
+from coach.verdict import hard_segments
+from common import BLUE, ORANGE, ZONE_COLORS, ctx, fdate, fdur, fnum, fpace, pace_ticks, style, tint, type_badge
 
 s, db = ctx()
 st.title("Séances")
@@ -31,7 +32,9 @@ an = db.analysis(choice["label_id"])
 d = detail(choice["label_id"], an["computed_at"] if an else None)
 m, v = d.get("metrics") or {}, d.get("verdict") or {}
 
-st.header(v.get("headline") or choice["name"] or "Séance")
+st.header(choice["name"] or "Séance")
+score_txt = f" · **{fnum(v['score'])}/10**" if v.get("score") is not None else ""
+st.markdown(f"{type_badge(v.get('type_fr'))} {fdate(choice['date'])}{score_txt}")
 if d.get("planned"):
     st.caption("Prévu : " + " + ".join(f"{p['name']} ({p['summary']})" for p in d["planned"]))
 else:
@@ -105,39 +108,55 @@ if rec is not None and len(rec):
     moving = rec["speed"] > 1.2
     sm = rec["speed"].where(moving).rolling(20, min_periods=5, center=True).mean()
     rec["pace"] = (1000 / sm).where(sm > 1.2)
-    c1, c2 = st.columns(2)
-    fig = go.Figure(go.Scatter(x=rec["km"], y=rec["pace"], mode="lines", line=dict(color=BLUE, width=2), name="Allure",
-                               hovertemplate="%{x:.2f} km<extra></extra>", customdata=rec["pace"].map(fpace)))
-    fig.update_traces(hovertemplate="%{x:.2f} km · %{customdata}/km<extra></extra>")
-    style(fig, 260, "pace")
-    pace_ticks(fig, rec["pace"].dropna().quantile([0.02, 0.98]).tolist())
-    fig.update_layout(title="Allure (min/km)", xaxis_title="km")
-    c1.plotly_chart(fig, width="stretch")
+    a = service.athlete(db, s)
+    reps_idx = [sg for sg in hard_segments(m, a) if sg["end_idx"] < len(rec)]
+
+    # Pace, with each detected rep shaded and the threshold pace as a reference line.
+    fig = go.Figure()
+    for sg in reps_idx:
+        fig.add_vrect(x0=rec["km"].iloc[sg["start_idx"]], x1=rec["km"].iloc[sg["end_idx"]],
+                      fillcolor=tint(ORANGE, 0.16), line_width=0, layer="below")
+    fig.add_scatter(x=rec["km"], y=rec["pace"], mode="lines", line=dict(color=BLUE, width=2), name="Allure",
+                    customdata=rec["pace"].map(fpace), hovertemplate="%{x:.2f} km · %{customdata}/km<extra></extra>")
+    fig.add_hline(y=a.threshold_pace, line=dict(color=ZONE_COLORS["Z4 seuil"], width=1.5, dash="dash"),
+                  annotation_text=f"seuil {fpace(a.threshold_pace)}", annotation_position="top right",
+                  annotation_font_color=ZONE_COLORS["Z4 seuil"])
+    style(fig, 300, "pace")
+    pace_ticks(fig, rec["pace"].dropna().quantile([0.02, 0.98]).tolist() + [a.threshold_pace])
+    fig.update_layout(title="Allure (min/km)" + (" — répétitions surlignées" if reps_idx else ""), xaxis_title="km",
+                      showlegend=False)
+    st.plotly_chart(fig, width="stretch")
+
     if rec["hr"].notna().any():
         # Skip the first minute (sensor/HR cold start, often ~100 bpm on a run that's really 150+) so it
-        # doesn't stretch the axis and squash the zone lines into unreadable clutter near the top.
+        # doesn't stretch the axis; the zones are drawn as colored bands instead of thin lines.
         warmed = rec[rec["elapsed"] >= 60] if (rec["elapsed"] >= 60).any() else rec
-        fig = go.Figure(go.Scatter(x=warmed["km"], y=warmed["hr"], mode="lines", line=dict(color=ORANGE, width=2), name="FC",
-                                   hovertemplate="%{x:.2f} km · %{y:.0f} bpm<extra></extra>"))
-        a = service.athlete(db, s)
         hr_vals = warmed["hr"].dropna()
-        if len(hr_vals):
-            lo_v, hi_v = hr_vals.quantile(0.02), hr_vals.quantile(0.98)
-            pad = max(3.0, (hi_v - lo_v) * 0.15)
-            fig.update_yaxes(range=[lo_v - pad, hi_v + pad])
-        for name, lo, hi in a.hr_zone_bounds()[1:]:
-            fig.add_hline(y=lo, line=dict(color=MUTED, width=1, dash="dot"),
-                          annotation_text=f"{name.split()[0]} {lo:.0f}", annotation_position="top left",
-                          annotation_font_color=MUTED)
-        style(fig, 260).update_layout(title="Fréquence cardiaque (bpm)", xaxis_title="km")
-        c2.plotly_chart(fig, width="stretch")
-        c2.caption("1re minute masquée (montée en régime du capteur) pour garder une échelle lisible.")
+        lo_v, hi_v = (hr_vals.quantile(0.02), hr_vals.quantile(0.98)) if len(hr_vals) else (100, 200)
+        pad = max(4.0, (hi_v - lo_v) * 0.15)
+        y0, y1 = lo_v - pad, hi_v + pad
+        fig = go.Figure()
+        for name, lo, hi in a.hr_zone_bounds():
+            b0, b1 = max(lo, y0), min(hi, y1)
+            if b1 <= b0:
+                continue
+            fig.add_hrect(y0=b0, y1=b1, fillcolor=tint(ZONE_COLORS[name], 0.13), line_width=0, layer="below",
+                          annotation_text=f"{name}", annotation_position="right",
+                          annotation_font=dict(color=ZONE_COLORS[name], size=11))
+        fig.add_scatter(x=warmed["km"], y=warmed["hr"], mode="lines", line=dict(color="#111827", width=1.8), name="FC",
+                        hovertemplate="%{x:.2f} km · %{y:.0f} bpm<extra></extra>")
+        style(fig, 300).update_layout(title="Fréquence cardiaque (bpm) et zones", xaxis_title="km", showlegend=False,
+                                      margin=dict(r=90))
+        fig.update_yaxes(range=[y0, y1])
+        st.plotly_chart(fig, width="stretch")
+        st.caption("1re minute masquée (montée en régime du capteur) pour garder une échelle lisible.")
 
 zc1, zc2 = st.columns(2)
 for col, key, title in ((zc1, "zones_hr", "Temps par zone de FC"), (zc2, "zones_pace", "Temps par zone d'allure")):
     z = m.get(key) or {}
     if z:
-        fig = go.Figure(go.Bar(x=[v_ * 100 for v_ in z.values()], y=list(z.keys()), orientation="h", marker_color=BLUE,
+        fig = go.Figure(go.Bar(x=[v_ * 100 for v_ in z.values()], y=list(z.keys()), orientation="h",
+                               marker_color=[ZONE_COLORS.get(k_, BLUE) for k_ in z],
                                hovertemplate="%{y} : %{x:.0f} %<extra></extra>", text=[f"{v_:.0%}" for v_ in z.values()],
                                textposition="outside"))
         style(fig, 220).update_layout(title=title, hovermode="closest", xaxis=dict(range=[0, 110], ticksuffix=" %"))

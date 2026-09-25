@@ -2,7 +2,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from coach import service
-from common import BAND, BLUE, GOOD, MUTED, ORANGE, ctx, fnum, style
+from common import BAND, BLUE, GOOD, MUTED, ORANGE, ZONE_COLORS, ctx, fnum, style
 
 s, db = ctx()
 st.title("Charge d'entraînement")
@@ -55,7 +55,8 @@ if not weekly.empty:
     c1.plotly_chart(fig, width="stretch")
 
     fig = go.Figure()
-    for col, name, color in (("pct_low", "Facile (Z1-Z2)", BLUE), ("pct_mid", "Tempo (Z3)", ORANGE), ("pct_high", "Intense (Z4-Z5)", "#1baf7a")):
+    for col, name, color in (("pct_low", "Facile (Z1-Z2)", ZONE_COLORS["Z2 endurance"]), ("pct_mid", "Tempo (Z3)", ZONE_COLORS["Z3 tempo"]),
+                             ("pct_high", "Intense (Z4-Z5)", ZONE_COLORS["Z5 VO2max"])):
         fig.add_bar(x=labels, y=w[col] * 100, name=name, marker_color=color,
                     hovertemplate=name + " : %{y:.0f} %<extra></extra>")
     fig.add_hline(y=80, line=dict(color=GOOD, dash="dot"), annotation_text="80 % facile", annotation_font_color=MUTED)
