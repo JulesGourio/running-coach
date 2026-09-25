@@ -33,7 +33,7 @@ if len(h):
     fig.add_scatter(x=h["date"], y=h["hrv"], mode="lines+markers", line=dict(color=BLUE, width=2), name="VFC",
                     hovertemplate="%{x|%d %b} : %{y:.0f} ms<extra></extra>")
     style(fig, 280).update_layout(title="VFC nocturne (ms)")
-    c1.plotly_chart(fig, use_container_width=True)
+    c1.plotly_chart(fig, width="stretch")
     c1.caption("Datée au jour du réveil. Une VFC sous ta plage normale plusieurs jours de suite signale une fatigue à respecter.")
 
 rh = daily.dropna(subset=["rhr"])
@@ -43,7 +43,7 @@ if len(rh):
     fig.add_scatter(x=rh["date"], y=rh["rhr"].rolling(7, min_periods=3).mean(), mode="lines", name="Moyenne 7 j",
                     line=dict(color=ORANGE, width=1, dash="dot"))
     style(fig, 280).update_layout(title="FC de repos (bpm)")
-    c2.plotly_chart(fig, use_container_width=True)
+    c2.plotly_chart(fig, width="stretch")
 
 sl = daily.dropna(subset=["sleep_score"])
 if len(sl):
@@ -51,4 +51,4 @@ if len(sl):
                            customdata=sl["sleep_total"].fillna(""),
                            hovertemplate="Nuit du %{x|%d %b} : %{y:.0f}/100 · %{customdata}<extra></extra>"))
     style(fig, 260).update_layout(title="Score de sommeil", showlegend=False, hovermode="closest", yaxis=dict(range=[0, 100]))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")

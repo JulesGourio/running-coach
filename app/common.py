@@ -96,7 +96,7 @@ def sidebar() -> None:
     s, db = ctx()
     with st.sidebar:
         st.caption(f"Données : `{s.data_dir}`")
-        if st.button("Synchroniser COROS", icon=":material/sync:", use_container_width=True):
+        if st.button("Synchroniser COROS", icon=":material/sync:", width="stretch"):
             from coach.sources.coros_mcp import NeedsLogin, describe
             from coach.sync import analyze, sync_mcp
             logs: list[str] = []

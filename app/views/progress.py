@@ -42,7 +42,7 @@ if series:
                           annotation_font_color=MUTED, annotation_position="top left")
     style(fig, 320).update_layout(title="Prédiction 10 km et projection vers le jour J")
     time_ticks(fig, y + [s.goal_a or y[0], s.goal_b or y[0]] + ([proj["low"], proj["high"]] if proj else []))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     if pr["probabilities"]:
         p = pr["probabilities"]
         st.markdown(f"Probabilité estimée d'atteindre l'objectif A : **{p.get('A', 0):.0%}**, l'objectif B : **{p.get('B', 0):.0%}**.")
@@ -60,7 +60,7 @@ if len(ph):
                                customdata=ph["pace_at_hr"].map(fpace), hovertemplate="%{x|%d %b} : %{customdata}/km<extra></extra>"))
     style(fig, 280, "pace").update_layout(title=f"Allure à {pr['ref_hr']} bpm (footings et sorties longues)", showlegend=False)
     pace_ticks(fig, ph["pace_at_hr"].tolist())
-    c1.plotly_chart(fig, use_container_width=True)
+    c1.plotly_chart(fig, width="stretch")
     c1.caption("Si la courbe monte (allure plus rapide à la même FC), ton moteur aérobie progresse. C'est l'indicateur le plus fiable.")
 else:
     c1.info(f"Pas assez de footings avec une FC moyenne proche de {pr['ref_hr']} bpm pour tracer la tendance.")
@@ -75,7 +75,7 @@ if len(ef):
         fig.add_scatter(x=ef["date"], y=ef["ef"].rolling(4, min_periods=2).mean(), mode="lines", name="Moyenne sur 4",
                         line=dict(color=ORANGE, width=2))
     style(fig, 280).update_layout(title="Efficacité (m/min par battement) en endurance")
-    c2.plotly_chart(fig, use_container_width=True)
+    c2.plotly_chart(fig, width="stretch")
 
 be = pr["best_efforts"]
 if be:
@@ -83,7 +83,7 @@ if be:
     names = {"400": "400 m", "1000": "1 km", "1609": "1 mile", "3000": "3 km", "5000": "5 km", "10000": "10 km", "21097": "Semi"}
     st.dataframe(pd.DataFrame([{"Distance": names.get(k_, k_), "Temps": fdur(t), "Allure": f"{fpace(t / (int(k_) / 1000))}/km",
                                 "Date": fdate(d)} for k_, (t, d) in sorted(be.items(), key=lambda kv: int(kv[0]))]),
-                 hide_index=True, use_container_width=True)
+                 hide_index=True, width="stretch")
     st.caption("Efforts extraits de n'importe quelle portion de tes séances : un 5 km peut être la fin d'une sortie longue.")
 
 with st.expander("Profil utilisé pour les calculs"):

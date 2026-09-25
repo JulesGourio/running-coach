@@ -9,6 +9,15 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
+# The official MCP server's hostname is region-specific; unlike the unofficial API's base URLs
+# (coach/sources/coros_web.py), COROS does not serve a single global host for it.
+MCP_URLS = {
+    "eu": "https://mcpeu.coros.com/mcp",
+    "us": "https://mcp.coros.com/mcp",
+    "asia": "https://mcpcn.coros.com/mcp",
+    "cn": "https://mcpcn.coros.com/mcp",
+}
+
 
 def _float(name: str) -> float | None:
     v = os.getenv(name, "").strip()
@@ -28,8 +37,9 @@ def _pace(name: str) -> float | None:
 @dataclass
 class Settings:
     data_dir: Path = field(default_factory=lambda: Path(os.getenv("COACH_DATA_DIR", ROOT / "data")))
-    coros_mcp_url: str = field(default_factory=lambda: os.getenv("COROS_MCP_URL", "https://mcp.coros.com/mcp"))
     coros_region: str = field(default_factory=lambda: os.getenv("COROS_REGION", "eu"))
+    coros_mcp_url: str = field(default_factory=lambda: os.getenv("COROS_MCP_URL")
+                                or MCP_URLS.get(os.getenv("COROS_REGION", "eu"), MCP_URLS["eu"]))
     coros_email: str | None = field(default_factory=lambda: os.getenv("COROS_EMAIL") or None)
     coros_password: str | None = field(default_factory=lambda: os.getenv("COROS_PASSWORD") or None)
     oauth_port: int = field(default_factory=lambda: int(os.getenv("COACH_OAUTH_PORT", "8765")))

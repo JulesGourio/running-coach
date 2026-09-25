@@ -38,6 +38,6 @@ for d in days:
         "Réalisé": " + ".join(f"{x['name'] or ''} ({fnum(x['distance_km'])} km)" for x in d["done"]),
         "Note": next((x["score"] for x in d["done"] if x["score"] is not None), None),
     })
-st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True, height=min(900, 38 * len(rows) + 40),
+st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", height=min(900, 38 * len(rows) + 40),
              column_config={"Note": st.column_config.ProgressColumn("Note", min_value=0, max_value=10, format="%.1f")})
 st.caption("Pour modifier une séance, demande-le à Claude : il utilise le connecteur COROS et met à jour ton calendrier.")

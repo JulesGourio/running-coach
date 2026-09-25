@@ -1,6 +1,7 @@
 """FIT file decoding into a per-second DataFrame plus laps and session summary."""
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,6 +9,12 @@ from pathlib import Path
 import fitdecode
 import numpy as np
 import pandas as pd
+
+# COROS watches write a handful of malformed definition messages (a known fitdecode/FIT quirk,
+# harmless — the fields concerned aren't read here) that fitdecode reports as this UserWarning on
+# every file. It's not actionable and drowns real warnings/errors in a wall of noise, so silence it.
+warnings.filterwarnings("ignore", message=r"invalid field size \d+ in definition message",
+                         category=UserWarning, module="fitdecode.reader")
 
 SEMI = 180 / 2**31
 

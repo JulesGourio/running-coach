@@ -81,7 +81,8 @@ def cmd_status(_: argparse.Namespace) -> None:
     from coach import service
     s, db = _db()
     r = service.readiness_today(db, s)
-    print(f"Forme du jour : {r['level']} ({r['score']}/100)")
+    score = f"{r['score']}/100" if r["score"] is not None else "score indisponible"
+    print(f"Forme du jour : {r['level']} ({score})")
     for x in r["reasons"]:
         print(f"  - {x}")
     if r.get("advice"):
@@ -100,6 +101,14 @@ def cmd_api(ns: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    # Windows opens stdout/stderr in the legacy console codepage by default, which mangles accented
+    # characters in this French-language CLI; force UTF-8 so `coach status` etc. print correctly.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except ValueError:
+                pass
     p = argparse.ArgumentParser(prog="coach", description="Coach de course à pied branché sur COROS")
     sub = p.add_subparsers(required=True)
     sub.add_parser("login", help="Connexion au serveur officiel COROS (ouvre le navigateur)").set_defaults(fn=cmd_login)

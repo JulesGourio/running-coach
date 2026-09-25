@@ -86,7 +86,7 @@ if reps and reps.get("reps"):
                   "Écart (s/km)": round(r["delta_s"], 1) if r["delta_s"] is not None else None,
                   "Statut": r["status"], "FC moy.": round(done["avg_hr"]) if done.get("avg_hr") else None,
                   "Distance (m)": round(done["distance_m"]) if done.get("distance_m") else None})
-    st.dataframe(pd.DataFrame(t), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(t), hide_index=True, width="stretch")
 
 rec = d.get("records")
 if rec is not None and len(rec):
@@ -102,7 +102,7 @@ if rec is not None and len(rec):
     style(fig, 260, "pace")
     pace_ticks(fig, rec["pace"].dropna().quantile([0.02, 0.98]).tolist())
     fig.update_layout(title="Allure (min/km)", xaxis_title="km")
-    c1.plotly_chart(fig, use_container_width=True)
+    c1.plotly_chart(fig, width="stretch")
     if rec["hr"].notna().any():
         fig = go.Figure(go.Scatter(x=rec["km"], y=rec["hr"], mode="lines", line=dict(color=ORANGE, width=2), name="FC",
                                    hovertemplate="%{x:.2f} km · %{y:.0f} bpm<extra></extra>"))
@@ -111,7 +111,7 @@ if rec is not None and len(rec):
             fig.add_hline(y=lo, line=dict(color=MUTED, width=1, dash="dot"), annotation_text=name.split()[0],
                           annotation_position="top left", annotation_font_color=MUTED)
         style(fig, 260).update_layout(title="Fréquence cardiaque (bpm)", xaxis_title="km")
-        c2.plotly_chart(fig, use_container_width=True)
+        c2.plotly_chart(fig, width="stretch")
 
 zc1, zc2 = st.columns(2)
 for col, key, title in ((zc1, "zones_hr", "Temps par zone de FC"), (zc2, "zones_pace", "Temps par zone d'allure")):
@@ -122,14 +122,14 @@ for col, key, title in ((zc1, "zones_hr", "Temps par zone de FC"), (zc2, "zones_
                                textposition="outside"))
         style(fig, 220).update_layout(title=title, hovermode="closest", xaxis=dict(range=[0, 110], ticksuffix=" %"))
         fig.update_yaxes(autorange="reversed")
-        col.plotly_chart(fig, use_container_width=True)
+        col.plotly_chart(fig, width="stretch")
 
 if d.get("laps"):
     st.subheader("Tours")
     laps = [{"#": i, "Distance (m)": round(l["distance_m"] or 0), "Temps": fdur(l.get("timer_s") or l.get("elapsed_s")),
              "Allure": fpace((l.get("timer_s") or l.get("elapsed_s") or 0) / (l["distance_m"] / 1000)) if l.get("distance_m") else "—",
              "FC moy.": l.get("avg_hr"), "FC max": l.get("max_hr")} for i, l in enumerate(d["laps"], 1)]
-    st.dataframe(pd.DataFrame(laps), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(laps), hide_index=True, width="stretch")
 
 be = m.get("best_efforts") or {}
 if be:

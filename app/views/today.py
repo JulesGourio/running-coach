@@ -58,7 +58,7 @@ for method, t in pr["predictions"].items():
                  "Écart objectif A": ("+" if t > s.goal_a else "−") + fdur(abs(t - s.goal_a)),
                  "Écart objectif B": ("+" if t > s.goal_b else "−") + fdur(abs(t - s.goal_b))})
 if rows:
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 proj = pr["projection"]
 if proj:
     p = pr["probabilities"]
@@ -92,5 +92,5 @@ st.subheader("Dernières séances")
 table = [{"Date": fdate(x["date"]), "Séance": x["name"], "Type": x["kind_fr"], "Note": x["score"],
           "Constat": (x["findings"] or [""])[0], "Verdict du coach": "oui" if x["coach_verdict"] else ""}
          for x in recent]
-st.dataframe(pd.DataFrame(table), hide_index=True, use_container_width=True,
+st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch",
              column_config={"Note": st.column_config.ProgressColumn("Note", min_value=0, max_value=10, format="%.1f")})

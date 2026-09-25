@@ -22,9 +22,10 @@ dashboard suffisent.
 
 ### Connexion à COROS, dans l'ordre
 
-1. **Serveur officiel COROS** (`mcp.coros.com`) : connexion sécurisée comme Claude ou Cursor,
-   sans mot de passe dans le code. Le jeton est stocké dans `data/.coros_oauth.json`, qui n'est pas versionné.
-   Si ton compte dépend d'un autre serveur régional, change `COROS_MCP_URL` dans `.env`.
+1. **Serveur officiel COROS** : connexion sécurisée comme Claude ou Cursor, sans mot de passe dans
+   le code. Le jeton est stocké dans `data/.coros_oauth.json`, qui n'est pas versionné. L'hôte MCP
+   dépend de la région du compte (`COROS_REGION`, `eu` par défaut ; `us` ou `asia`/`cn` sinon) ;
+   ne renseigne `COROS_MCP_URL` que pour le forcer explicitement.
 2. **API non officielle** (repli automatique si l'étape 1 échoue) : renseigne `COROS_EMAIL` et
    `COROS_PASSWORD` dans `.env`. Elle récupère les séances et les fichiers FIT, mais pas la VFC ni le
    sommeil. Elle n'est pas supportée par COROS et peut cesser de fonctionner.
