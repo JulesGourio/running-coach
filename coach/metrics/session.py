@@ -11,6 +11,7 @@ from coach.metrics.zones import HR_ZONES, PACE_ZONES, Athlete, hr_zone_index, sp
 
 MOVING_SPEED = 1.2  # m/s; below this the athlete is walking or stopped
 BEST_DISTANCES = [400, 1000, 1609, 3000, 5000, 10000, 21097]
+RECORD_DISTANCES = [400, 1000, 1609, 3000, 5000, 10000, 15000, 21097, 30000, 42195]
 BEST_DURATIONS = [180, 360, 720, 1200, 1800]
 
 
@@ -73,6 +74,52 @@ def best_efforts(t: np.ndarray, dist: np.ndarray, segments: list[dict]) -> dict[
             k = str(d)
             if k not in out or best_t < out[k]:
                 out[k] = best_t
+    return out
+
+
+def track(df: pd.DataFrame, max_points: int = 400) -> list[list[float]]:
+    """Downsampled route [lat, lon, altitude, km] for maps (the full FIT isn't read to draw every route)."""
+    g = df.dropna(subset=["lat", "lon"]) if "lat" in df else df.iloc[0:0]
+    if g.empty:
+        return []
+    g = g.iloc[:: max(1, len(g) // max_points)]
+    alt = g["altitude"].fillna(-1) if "altitude" in g else pd.Series(-1, index=g.index)
+    return [[round(la, 5), round(lo, 5), round(float(al), 1), round(float(d or 0) / 1000, 3)]
+            for la, lo, al, d in zip(g["lat"], g["lon"], alt, g["distance"].fillna(0))]
+
+
+def records(t: np.ndarray, dist: np.ndarray, cad: np.ndarray | None = None, alt: np.ndarray | None = None) -> dict[str, float]:
+    """Personal-record style bests: fastest time over each distance anywhere in the run, on the continuous stream
+    (like Strava or COROS best efforts). Not used for fitness estimates (a broken-up interval session would be
+    diluted), only as records: a race or a tempo run sets them."""
+    out: dict[str, float] = {}
+    if len(dist) < 2:
+        return out
+    # GPS jumps: more than 8 m covered in one second (29 km/h). A window containing one isn't a record.
+    step = np.diff(dist, prepend=dist[0]) / np.maximum(np.diff(t, prepend=t[0] - 1), 1)
+    bad = step > 8.0
+    if cad is not None and len(cad) == len(dist):
+        # fast but not at a running cadence: a car, a bike or a lift recorded in running mode
+        fast = pd.Series(step).rolling(10, min_periods=1, center=True).mean().to_numpy() > 5.5
+        bad |= fast & ~(np.nan_to_num(cad, nan=0) >= 150)
+    glitches = np.cumsum(bad)
+    for d in RECORD_DISTANCES:
+        if dist[-1] - dist[0] < d:
+            continue
+        j = np.searchsorted(dist, dist + d)
+        ok = np.flatnonzero(j < len(dist))
+        if not len(ok):
+            continue
+        clean = glitches[j[ok]] == glitches[ok]
+        if alt is not None and len(alt) == len(dist) and not np.all(np.isnan(alt)):
+            a_f = pd.Series(alt).interpolate(limit_direction="both").to_numpy()
+            clean &= (a_f[ok] - a_f[j[ok]]) / d <= 0.015  # net descent over 1.5 %: downhill-aided, not a record
+        times = (t[j[ok]] - t[ok])[clean]
+        # and no average faster than 23 km/h beyond 400 m (8 m/s over 400 m): beyond any amateur, so bad data
+        cap = d / (8.0 if d <= 400 else 6.4)
+        times = times[times >= cap]
+        if len(times):
+            out[str(d)] = float(times.min())
     return out
 
 
@@ -219,6 +266,8 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
         "ascent_m": ascent,
         "pace_cv": float(rolling_speed.std() / rolling_speed.mean()) if len(rolling_speed.dropna()) > 60 else None,
         "best_efforts": best_efforts(t, dist, flat),
+        "records": records(t, dist, cad, df["altitude"].to_numpy(dtype=float)),
+        "track": track(df),
         "best_durations": best_durations(speed, flat),
         "quality_segments": segments,
         "hr_speed": hr_speed_fit(hr, gap_speed, moving, segments) if has_hr else None,

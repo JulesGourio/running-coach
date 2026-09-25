@@ -119,15 +119,11 @@ with st.container(horizontal=True):
     st.metric("Plus gros mois", f"{fnum(rec['best_month'][1], 0)} km", border=True,
               delta=rec["best_month"][0].strftime("%m/%Y"), delta_color="off")
 
-best = hist.best_by_distance(df)
-if best:
-    st.markdown("**Meilleures sorties sur les distances classiques** (allure moyenne de la sortie entière : courses ou sorties de cette longueur)")
-    st.dataframe(pd.DataFrame([{"Distance": b["distance"], "Date": fdate(b["date"]), "Km": round(b["km"], 2), "Temps": fdur(b["time"]),
-                                "Allure": f"{fpace(b['pace'])}/km", "Séance": b["name"]} for b in best]),
+recs, n_fit, n_runs = hist.personal_records(db)
+if recs:
+    st.markdown("**Records personnels** — meilleur temps sur chaque distance, n'importe où dans une sortie")
+    st.dataframe(pd.DataFrame([{"Distance": r_["distance"], "Temps": fdur(r_["time"]), "Allure": f"{fpace(r_['time'] / (r_['meters'] / 1000))}/km",
+                                "Date": fdate(r_["date"]), "Pendant": f"{r_['name'] or ''} ({fnum(r_['run_km'], 1)} km)"} for r_ in recs]),
                  hide_index=True, width="stretch")
-be = service.progress(db, s)["best_efforts"]
-if be:
-    names = {"400": "400 m", "1000": "1 km", "1609": "1 mile", "3000": "3 km", "5000": "5 km", "10000": "10 km", "21097": "Semi"}
-    st.markdown("**Meilleurs efforts mesurés dans les séances détaillées** (90 derniers jours)")
-    st.dataframe(pd.DataFrame([{"Distance": names.get(k, k), "Temps": fdur(t), "Allure": f"{fpace(t / (int(k) / 1000))}/km", "Date": fdate(d)}
-                               for k, (t, d) in sorted(be.items(), key=lambda kv: int(kv[0]))]), hide_index=True, width="stretch")
+    st.caption(f"Calculés sur les {n_fit} sorties dont le fichier FIT détaillé est déjà téléchargé (sur {n_runs}) ; le reste arrive "
+               "au fil des synchronisations. Trail exclu (les descentes fausseraient les records).")

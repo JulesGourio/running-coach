@@ -45,6 +45,7 @@ def _session_row(act: dict, an: dict | None, coach: dict | None) -> dict:
     v = (an or {}).get("verdict") or {}
     return {
         "label_id": act["label_id"], "date": act["date"], "name": act.get("name"), "type": act.get("type"),
+        "sport_type": act.get("sport_type"), "calories": act.get("calories"),
         "distance_km": act.get("distance_km"), "duration_s": act.get("duration_s"), "avg_pace": act.get("avg_pace"),
         "avg_hr": act.get("avg_hr"), "has_fit": bool(act.get("fit_path")),
         "kind": v.get("type"), "kind_fr": v.get("type_fr"), "score": v.get("score"), "headline": v.get("headline"),
@@ -56,10 +57,10 @@ def _session_row(act: dict, an: dict | None, coach: dict | None) -> dict:
     }
 
 
-def sessions(db: DB, days: int = 60) -> list[dict]:
+def sessions(db: DB, days: int = 60, sports: str = "run") -> list[dict]:
     since = (date.today() - timedelta(days=days)).isoformat()
     an = db.analyses()
-    return [_session_row(a, an.get(a["label_id"]), db.verdict(a["label_id"])) for a in db.activities(since)]
+    return [_session_row(a, an.get(a["label_id"]), db.verdict(a["label_id"])) for a in db.activities(since, sports=sports)]
 
 
 def sessions_between(db: DB, since: str, until: str) -> list[dict]:
@@ -262,8 +263,7 @@ def predictions_all(db: DB, s: Settings, pr: dict | None = None) -> list[dict]:
     pr = pr or progress(db, s)
     vma = pr["vma"]
     fit = next((f for f in reversed(db.fitness()) if f.get("p10")), {})
-    df = hist.frame(db)
-    real = {b["distance"]: b for b in hist.best_by_distance(df)} if not df.empty else {}
+    recs = {r["meters"]: r for r in hist.personal_records(db)[0]}
     out = []
     for name, (dist, key) in RACE_DISTANCES.items():
         m = {}
@@ -274,10 +274,10 @@ def predictions_all(db: DB, s: Settings, pr: dict | None = None) -> list[dict]:
         if fit.get(key):
             m["COROS"] = fit[key]
         est = float(np.median(list(m.values()))) if m else None
-        r = real.get(name)
+        r = recs.get(dist)
         out.append({"distance": name, "meters": dist, "methods": m, "estimate": est,
                     "pace": est / (dist / 1000) if est else None,
-                    "real": {"time": r["time"], "date": r["date"].isoformat(), "pace": r["pace"]} if r else None})
+                    "real": {"time": r["time"], "date": r["date"], "pace": r["time"] / (dist / 1000)} if r else None})
     return out
 
 

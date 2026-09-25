@@ -268,7 +268,8 @@ def quality_segments(df: pd.DataFrame, threshold_pace: float, gate: float = QUAL
         if dur < min_dur_s:
             continue
         d = float(dist[e] - dist[s])
-        if d > 150 and dur / d * 1000 < 170 and np.nanmean(cad[s:e + 1]) < 170:
+        c_seg = cad[s:e + 1]
+        if d > 150 and dur / d * 1000 < 170 and (np.all(np.isnan(c_seg)) or np.nanmean(c_seg) < 170):
             continue  # > 21 km/h at a jogging cadence: a GPS jump, not a sprint (a real one is ~180+ steps/min)
         out.append({"start_idx": int(s), "end_idx": int(e), "duration_s": dur, "distance_m": d,
                     "avg_pace": dur / d * 1000 if d > 0 else None, "source": "flux",

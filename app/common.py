@@ -167,6 +167,35 @@ def zone_table(a: Athlete):
                                        if c == "Zone" else "" for c in row.index], axis=1)
 
 
+def route_map(lat, lon, color=None, color_title: str = "", hover=None, height: int = 420, colorscale="RdYlBu",
+              reverse: bool = False) -> go.Figure:
+    """OpenStreetMap route (no API key), optionally colored point by point (pace, altitude…)."""
+    import math
+    lat, lon = list(lat), list(lon)
+    la0, la1, lo0, lo1 = min(lat), max(lat), min(lon), max(lon)
+    span = max(la1 - la0, (lo1 - lo0) * math.cos(math.radians((la0 + la1) / 2)), 0.002)
+    zoom = max(3, min(16, math.log2(360 / span) - 1.2))
+    fig = go.Figure(go.Scattermap(lat=lat, lon=lon, mode="lines", line=dict(width=5, color="#1e293b"), hoverinfo="skip"))
+    if color is not None:
+        fig.add_trace(go.Scattermap(lat=lat, lon=lon, mode="markers", hovertext=hover, hoverinfo="text" if hover is not None else "skip",
+                                    marker=dict(size=7, color=list(color), colorscale=colorscale, reversescale=reverse, showscale=True,
+                                                colorbar=dict(title=color_title, thickness=12))))
+    fig.add_trace(go.Scattermap(lat=[lat[0], lat[-1]], lon=[lon[0], lon[-1]], mode="markers+text", text=["départ", "arrivée"],
+                                textposition="top right", marker=dict(size=12, color=["#16a34a", "#dc2626"]), hoverinfo="skip"))
+    fig.update_layout(map=dict(style="open-street-map", center=dict(lat=(la0 + la1) / 2, lon=(lo0 + lo1) / 2), zoom=zoom),
+                      height=height, margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
+    return fig
+
+
+def elevation_fig(km, alt, height: int = 220) -> go.Figure:
+    fig = go.Figure(go.Scatter(x=list(km), y=list(alt), mode="lines", fill="tozeroy", line=dict(color="#0d9488", width=2),
+                               fillcolor="rgba(13,148,136,0.18)", hovertemplate="%{x:.2f} km · %{y:.0f} m<extra></extra>"))
+    style(fig, height).update_layout(title="Profil d'altitude (m)", xaxis_title="km", showlegend=False)
+    lo, hi = min(alt), max(alt)
+    fig.update_yaxes(range=[lo - max(5, (hi - lo) * 0.15), hi + max(5, (hi - lo) * 0.15)])
+    return fig
+
+
 def sync_bar() -> None:
     """Compact sync control above every page (no sidebar: the page gets the full width)."""
     s, db = ctx()

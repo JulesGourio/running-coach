@@ -143,3 +143,22 @@ def test_vma_from_field_tests():
     assert 17.4 < prog.vma_from_test("effort", distance_m=3000, time_s=630) * 3.6 < 17.8
     assert prog.vma_from_test("effort", distance_m=1500, time_s=320) * 3.6 == pytest.approx(16.875)
     assert prog.vma_from_test("manuel", kmh=17) == pytest.approx(17 / 3.6)
+
+
+def test_records_ignore_gps_jumps_non_running_and_downhill():
+    import numpy as np
+    from coach.metrics.session import records
+    t = np.arange(0, 3000, 1.0)
+    speed = np.full(len(t), 3.3)          # 5:03/km running
+    speed[1000:1300] = 7.0                # 300 s at 25 km/h …
+    cad = np.full(len(t), 172.0)
+    cad[1000:1300] = 0.0                  # … with no cadence: a car or a bike
+    dist = np.cumsum(speed)
+    r = records(t, dist, cad)
+    assert r["1000"] > 290                # the fast stretch isn't a record
+    alt = 500 - dist * 0.05               # 5 % downhill all the way
+    assert "1000" not in records(t, np.cumsum(np.full(len(t), 3.3)), np.full(len(t), 172.0), alt)
+    dist_jump = np.cumsum(np.full(len(t), 3.3))
+    dist_jump[2000:] += 500               # a 500 m GPS jump
+    r = records(t, dist_jump, np.full(len(t), 172.0))
+    assert r["1000"] >= 1000 / 3.3 - 1

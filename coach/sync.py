@@ -123,7 +123,9 @@ def sync_web(s: Settings, db: DB, days: int = 30, max_fit: int = 15, log: Log = 
 
 
 async def _download_missing(db: DB, s: Settings, max_fit: int, download, log: Log) -> tuple[int, int]:
-    todo = [a for a in db.activities() if not a["fit_path"] and a["sport_type"]][:max_fit]
+    # running first (it drives every analysis), then the other sports; COROS allows 50 FIT files a day
+    todo = ([a for a in db.activities() if not a["fit_path"] and a["sport_type"]]
+            + [a for a in db.activities(sports="other") if not a["fit_path"] and a["sport_type"]])[:max_fit]
     ok = err = 0
     for a in todo:
         dest = s.fit_dir / f"{a['label_id']}.fit"
@@ -132,6 +134,20 @@ async def _download_missing(db: DB, s: Settings, max_fit: int, download, log: Lo
             db.set_fit_path(a["label_id"], str(dest))
             ok += 1
         except (CorosError, OSError, ValueError) as e:
+            if "limit" in str(e).lower() and s.coros_email and s.coros_password:
+                # the official server's 50 FIT/day quota: the Training Hub web API still serves the files
+                log("Quota COROS de fichiers FIT atteint : suite par l'API web.")
+                web = CorosWeb(s.coros_email, s.coros_password, s.coros_region)
+
+                async def download(label, sport, dest, _w=web):
+                    return _w.download_fit(label, sport, dest)
+                try:
+                    await download(a["label_id"], a["sport_type"], dest)
+                    db.set_fit_path(a["label_id"], str(dest))
+                    ok += 1
+                    continue
+                except (CorosError, OSError, ValueError) as e2:
+                    e = e2
             err += 1
             log(f"FIT {a['date']} ({a['label_id']}) non téléchargé : {e}")
             if "limit" in str(e).lower():
@@ -170,6 +186,17 @@ def estimate_heart_rates(db: DB, days: int = 120) -> dict:
     return out
 
 
+def other_sport_verdict(act: dict, m: dict) -> dict:
+    """Hiking, cycling…: no running judgement, just what was done."""
+    km = (m.get("distance_m") or 0) / 1000
+    bits = [f"{km:.1f} km".replace(".", ",")] if km >= 0.5 else []
+    if m.get("ascent_m"):
+        bits.append(f"D+ {m['ascent_m']:.0f} m")
+    return {"type": "autre", "type_fr": act.get("type") or "Autre sport", "structure": " · ".join(bits),
+            "headline": " · ".join([act.get("type") or "Autre sport", *bits]), "score": None, "findings": [], "flags": [],
+            "planned": None, "reps": None, "segments": []}
+
+
 def analyze(s: Settings, db: DB, force: bool = False, log: Log = print) -> int:
     done = db.analyses()
     pending = [x for x in db.activities() if x["fit_path"] and x["label_id"] not in done]
@@ -184,15 +211,19 @@ def analyze(s: Settings, db: DB, force: bool = False, log: Log = print) -> int:
         db.set_meta("profile_key", key)
     plan = {d["date"]: d for d in db.plan_days()}
     n = 0
-    for act in db.activities():
+    for act in db.activities(sports="all"):
         if not act["fit_path"] or (act["label_id"] in done and not force):
             continue
         try:
             fit = read_fit(act["fit_path"])
+            m = compute_session_metrics(fit.records, a, fit.session, fit.laps)
         except Exception as e:  # noqa: BLE001
             log(f"Lecture impossible de {act['fit_path']} : {e}")
             continue
-        m = compute_session_metrics(fit.records, a, fit.session, fit.laps)
+        if act.get("sport_type") not in (100, 101, 102, 103, None):
+            db.save_analysis(act["label_id"], m, other_sport_verdict(act, m))
+            n += 1
+            continue
         day = plan.get(act["date"])
         course = next((c["json"] for c in (day or {}).get("courses", []) if c.get("json") and c["json"].get("sportType") in (1, 5)), None)
         v = judge(m, a, course, fit.records, fit.laps, act.get("sport_type"))

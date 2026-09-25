@@ -4,20 +4,30 @@ import streamlit as st
 
 from coach import service
 from coach.verdict import hard_segments
-from common import BLUE, ORANGE, ZONE_COLORS, ctx, fdate, fdur, fnum, fpace, pace_ticks, style, tint, type_badge
+from common import (BLUE, ORANGE, ZONE_COLORS, ctx, elevation_fig, fdate, fdur, fnum, fpace, pace_ticks, route_map, style, tint,
+                    type_badge)
 
 s, db = ctx()
 st.title("Séances")
 
-c1, c2, c3 = st.columns([1.2, 2, 5])
+RUN = (100, 101, 102, 103, None)
+c0, c1, c2, c3 = st.columns([1.4, 1.1, 1.8, 5])
+sport = c0.selectbox("Sport", ["Course à pied", "Autres sports", "Tous"], key="s-sport")
 period = c1.selectbox("Période", ["3 mois", "6 mois", "1 an", "Tout"], key="s-period")
-rows = service.sessions(db, {"3 mois": 91, "6 mois": 182, "1 an": 365}.get(period, 3650))
+rows = service.sessions(db, {"3 mois": 91, "6 mois": 182, "1 an": 365}.get(period, 3650),
+                        sports={"Course à pied": "run", "Autres sports": "other"}.get(sport, "all"))
 if not rows:
-    st.info("Aucune séance synchronisée.")
+    st.info("Aucune séance sur la période.")
     st.stop()
-cats = sorted({x["kind_fr"] or "Non analysée" for x in rows})
+
+
+def cat_of(x):
+    return x["kind_fr"] or ("Non analysée" if x.get("sport_type") in RUN else x["type"])
+
+
+cats = sorted({cat_of(x) for x in rows})
 cat = c2.selectbox("Type", ["Tous", *cats], key="s-cat")
-rows = [x for x in rows if cat == "Tous" or (x["kind_fr"] or "Non analysée") == cat]
+rows = [x for x in rows if cat == "Tous" or cat_of(x) == cat]
 
 
 def label(x):
@@ -35,17 +45,22 @@ def detail(label_id: str, computed_at: str | None):
 an = db.analysis(choice["label_id"])
 d = detail(choice["label_id"], an["computed_at"] if an else None)
 m, v = d.get("metrics") or {}, d.get("verdict") or {}
+is_run = choice.get("sport_type") in RUN
 
 st.header(v.get("structure") or choice["name"] or "Séance")
-st.markdown(f"{type_badge(v.get('type_fr'))} {fdate(choice['date'])} · :gray[{choice['name'] or ''}]")
-if d.get("planned"):
+st.markdown(f"{type_badge(v.get('type_fr') or choice['type'])} {fdate(choice['date'])} · :gray[{choice['name'] or ''}]")
+if not is_run:
+    pass
+elif d.get("planned"):
     plan_txt = " + ".join(f"{p['name']} ({p['summary']})" for p in d["planned"])
     st.caption(f"Prévu : {plan_txt}" + (f" · respect du plan **{fnum(v['score'])}/10**" if v.get("score") is not None else ""))
 else:
     st.caption("Séance hors plan.")
 
 cv = d.get("coach_verdict")
-if cv:
+if not is_run:
+    pass
+elif cv:
     with st.container(border=True):
         st.markdown("**Verdict du coach**" + (f" · {fnum(cv['score'])}/10" if cv.get("score") is not None else ""))
         st.markdown(cv["text"])
@@ -58,7 +73,17 @@ if v.get("findings"):
         st.markdown(f"- {f}")
 
 if not m:
-    st.warning("Pas de fichier FIT pour cette séance : seules les données résumées sont disponibles.")
+    st.info("Fichier FIT détaillé pas encore téléchargé : il arrive à la prochaine synchronisation. En attendant, le résumé COROS :",
+            icon=":material/downloading:")
+    with st.container(horizontal=True):
+        st.metric("Distance", f"{fnum(choice['distance_km'], 2)} km", border=True)
+        st.metric("Durée", fdur(choice["duration_s"]), border=True)
+        if choice.get("avg_pace") and is_run:
+            st.metric("Allure", f"{fpace(choice['avg_pace'])}/km", border=True)
+        if choice.get("avg_hr"):
+            st.metric("FC moyenne", f"{choice['avg_hr']:.0f} bpm", border=True)
+        if choice.get("calories"):
+            st.metric("Calories", f"{choice['calories']:.0f} kcal", border=True)
     st.stop()
 
 dec = (m.get("decoupling") or {}).get("decoupling_pct")
@@ -77,9 +102,39 @@ grid = [
      "Hausse de la FC à allure égale entre la 1re et la 2de moitié. Sous 5 % : endurance solide."),
     ("Charge", fnum(m["rtss"], 0), "Intensité × durée : 100 = une heure courue à ton allure seuil."),
 ]
+if not is_run:
+    spd = m["distance_m"] / m["moving_s"] * 3.6 if m.get("moving_s") else None
+    grid = [("Distance", f"{fnum(m['distance_m'] / 1000, 2)} km", None), ("Temps en mouvement", fdur(m["moving_s"]), None),
+            ("Durée totale", fdur(m.get("elapsed_s")), None), ("Vitesse moyenne", f"{fnum(spd, 1)} km/h" if spd else "—", None),
+            ("Dénivelé +", f"{fnum(m['ascent_m'], 0)} m", None), ("FC moyenne", f"{fnum(m['avg_hr'], 0)} bpm", None),
+            ("FC max", f"{fnum(m.get('max_hr'), 0)} bpm", None),
+            ("Calories", f"{choice['calories']:.0f} kcal" if choice.get("calories") else "—", None)]
 cols = st.columns(6)
 for i, (k, val, h) in enumerate(grid):
     cols[i % 6].metric(k, val, help=h, border=True)
+
+# ---- map and elevation ----------------------------------------------------------------------------------
+rec0 = d.get("records")
+if rec0 is not None and len(rec0) and rec0["lat"].notna().sum() > 10:
+    g = rec0.dropna(subset=["lat", "lon"])
+    g = g.iloc[:: max(1, len(g) // 1500)]
+    spd_s = g["speed"].rolling(15, min_periods=3, center=True).mean()
+    if is_run:
+        col_vals = (1000 / spd_s.where(spd_s > 1.2)).clip(lower=150, upper=600)
+        hover = [f"{d_ / 1000:.2f} km · {fpace(p_)}/km" if p_ == p_ else f"{d_ / 1000:.2f} km"
+                 for d_, p_ in zip(g["distance"].fillna(0), col_vals)]
+        fig = route_map(g["lat"], g["lon"], col_vals.fillna(col_vals.median()), "allure (s/km)", hover)
+    else:
+        col_vals = (spd_s * 3.6).fillna(0)
+        hover = [f"{d_ / 1000:.2f} km · {v_:.1f} km/h" for d_, v_ in zip(g["distance"].fillna(0), col_vals)]
+        fig = route_map(g["lat"], g["lon"], col_vals, "km/h", hover, reverse=True)
+    mc1, mc2 = st.columns([3, 2])
+    mc1.plotly_chart(fig, width="stretch")
+    mc1.caption("Couleur : " + ("allure (bleu = rapide, rouge = lent)." if is_run else "vitesse (bleu = rapide)."))
+    alt = g.dropna(subset=["altitude"])
+    if len(alt) > 10:
+        mc2.plotly_chart(elevation_fig(alt["distance"] / 1000, alt["altitude"], height=300), width="stretch")
+        mc2.caption(f"D+ {fnum(m.get('ascent_m'), 0)} m · point haut {alt['altitude'].max():.0f} m · point bas {alt['altitude'].min():.0f} m")
 
 reps = v.get("reps")
 if reps and reps.get("reps"):
@@ -108,7 +163,7 @@ if segments:
     st.dataframe(pd.DataFrame(t), hide_index=True, width="stretch")
 
 rec = d.get("records")
-if rec is not None and len(rec):
+if rec is not None and len(rec) and is_run:
     rec = rec.copy()
     rec["km"] = rec["distance"] / 1000
     moving = rec["speed"] > 1.2
@@ -157,8 +212,16 @@ if rec is not None and len(rec):
         st.plotly_chart(fig, width="stretch")
         st.caption("1re minute masquée (montée en régime du capteur) pour garder une échelle lisible.")
 
+if not is_run and rec is not None and len(rec) and rec["hr"].notna().any():
+    fig = go.Figure(go.Scatter(x=rec["distance"] / 1000, y=rec["hr"], mode="lines", line=dict(color="#111827", width=1.5),
+                               hovertemplate="%{x:.2f} km · %{y:.0f} bpm<extra></extra>"))
+    style(fig, 260).update_layout(title="Fréquence cardiaque (bpm)", xaxis_title="km", showlegend=False)
+    st.plotly_chart(fig, width="stretch")
+
 zc1, zc2 = st.columns(2)
 for col, key, title in ((zc1, "zones_hr", "Temps par zone de FC"), (zc2, "zones_pace", "Temps par zone d'allure")):
+    if key == "zones_pace" and not is_run:
+        continue
     z = m.get(key) or {}
     if z:
         fig = go.Figure(go.Bar(x=[v_ * 100 for v_ in z.values()], y=list(z.keys()), orientation="h",
@@ -176,7 +239,7 @@ if d.get("laps"):
              "FC moy.": l.get("avg_hr"), "FC max": l.get("max_hr")} for i, l in enumerate(d["laps"], 1)]
     st.dataframe(pd.DataFrame(laps), hide_index=True, width="stretch")
 
-be = m.get("best_efforts") or {}
+be = (m.get("best_efforts") or {}) if is_run else {}
 if be:
     st.subheader("Meilleurs efforts de la séance")
     names = {"400": "400 m", "1000": "1 km", "1609": "1 mile", "3000": "3 km", "5000": "5 km", "10000": "10 km", "21097": "Semi"}
@@ -189,7 +252,7 @@ if kind:
     a_ = service.athlete(db, s)
     ans = db.analyses()
     same = []
-    for x in service.sessions(db, 3650):
+    for x in service.sessions(db, 3650, sports="all"):
         if x["kind_fr"] != kind:
             continue
         mx = (ans.get(x["label_id"]) or {}).get("metrics") or {}

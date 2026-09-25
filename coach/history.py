@@ -84,3 +84,29 @@ def records(df: pd.DataFrame) -> dict:
     return {"longest": longest.to_dict(), "best_week": (wk.idxmax().date(), float(wk.max())),
             "best_month": (mo.idxmax().date(), float(mo.max())), "first": df["date"].min().date(),
             "total_km": float(df["distance_km"].sum()), "total_sessions": int(len(df))}
+
+
+RECORD_NAMES = {"400": "400 m", "1000": "1 km", "1609": "1 mile", "3000": "3 km", "5000": "5 km", "10000": "10 km",
+                "15000": "15 km", "21097": "Semi-marathon", "30000": "30 km", "42195": "Marathon"}
+
+
+def personal_records(db: DB) -> tuple[list[dict], int, int]:
+    """Fastest time over each distance anywhere in a run (continuous stream, like Strava/COROS best efforts),
+    over every run with a FIT file — road, track and treadmill (trail excluded: downhill stretches aren't records).
+    Returns (records, runs with detail, runs in total)."""
+    an = db.analyses()
+    runs = db.activities()
+    best: dict[str, dict] = {}
+    n_fit = 0
+    for a in runs:
+        m = (an.get(a["label_id"]) or {}).get("metrics") or {}
+        if not m:
+            continue
+        n_fit += 1
+        if a.get("sport_type") == 102:
+            continue
+        for k, t_ in (m.get("records") or {}).items():
+            if k not in best or t_ < best[k]["time"]:
+                best[k] = {"distance": RECORD_NAMES.get(k, k), "meters": int(k), "time": t_, "date": a["date"],
+                           "name": a.get("name"), "run_km": a.get("distance_km")}
+    return sorted(best.values(), key=lambda r: r["meters"]), n_fit, len(runs)

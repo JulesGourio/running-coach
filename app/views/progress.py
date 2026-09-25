@@ -126,11 +126,10 @@ st.dataframe(pd.DataFrame([{
     "Distance": r["distance"], "Estimation": fdur(r["estimate"]) if r["estimate"] else "—",
     "Allure": f"{fpace(r['pace'])}/km" if r["pace"] else "—",
     **{k: fdur(v) for k, v in r["methods"].items()},
-    "Ta meilleure sortie": f"{fdur(r['real']['time'])} ({fdate(r['real']['date'])})" if r["real"] else "—"} for r in allp]),
+    "Ton record": f"{fdur(r['real']['time'])} ({fdate(r['real']['date'])})" if r["real"] else "—"} for r in allp]),
     hide_index=True, width="stretch")
 st.caption("Estimation = médiane des méthodes. Au-delà du 10 km, l'endurance compte autant que la VMA : les méthodes "
-           "fondées sur la VMA supposent une endurance de coureur entraîné sur la distance, ta meilleure sortie réelle "
-           "(pas forcément à fond) sert de repère.")
+           "fondées sur la VMA supposent une endurance de coureur entraîné sur la distance, ton record sert de repère.")
 
 # ---- goals A/B week by week ------------------------------------------------------------------------------
 track = service.goal_track(db, s, pr)
