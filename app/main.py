@@ -14,6 +14,7 @@ pages = st.navigation([
     st.Page("views/recovery.py", title="Récupération", icon=":material/bedtime:"),
     st.Page("views/plan.py", title="Plan", icon=":material/calendar_month:"),
     st.Page("views/library.py", title="Séances types", icon=":material/fitness_center:"),
+    st.Page("views/race.py", title="Jour J", icon=":material/flag:"),
 ], position="top")
 sync_bar()
 pages.run()
