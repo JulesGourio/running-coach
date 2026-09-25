@@ -48,6 +48,7 @@ def _session_row(act: dict, an: dict | None, coach: dict | None) -> dict:
         "distance_km": act.get("distance_km"), "duration_s": act.get("duration_s"), "avg_pace": act.get("avg_pace"),
         "avg_hr": act.get("avg_hr"), "has_fit": bool(act.get("fit_path")),
         "kind": v.get("type"), "kind_fr": v.get("type_fr"), "score": v.get("score"), "headline": v.get("headline"),
+        "structure": v.get("structure"), "planned": bool(v.get("planned")),
         "findings": v.get("findings", []), "flags": v.get("flags", []),
         "load": m.get("load"), "ef": m.get("ef"), "decoupling": (m.get("decoupling") or {}).get("decoupling_pct"),
         "easy_share": sum((m.get("zones_hr") or {}).get(k, 0) for k in ("Z1 récup", "Z2 endurance")) if m.get("zones_hr") else None,
@@ -129,40 +130,104 @@ def progress(db: DB, s: Settings) -> dict:
     # continuous 5/10 km this year. VMA is reverse-engineered from them, then extrapolated to the race.
     rep_sessions = [(date.fromisoformat(x["date"]), an[x["label_id"]]["metrics"].get("quality_segments") or [])
                     for x in acts]
-    vma_now = prog.estimate_vma(rep_sessions, a.threshold_pace, a.hr_max, today)
+    hr_fits = [(date.fromisoformat(x["date"]), an[x["label_id"]]["metrics"].get("hr_speed")) for x in acts]
     fit = [f for f in db.fitness() if f.get("vo2max") or f.get("p10")]
     last_fit = fit[-1] if fit else {}
+    seuil = (1000 / a.threshold_pace) / prog.THRESHOLD_VMA_FRACTION if a.threshold_pace else None
+    test = latest_vma_test(db, today)
+
+    def retained(end: date) -> tuple[float | None, str, dict]:
+        """Best available VMA at a date: a recent field test, else the heart-rate line of the best interval session
+        (never below the paces actually run), else the paces run, else COROS threshold pace."""
+        t = latest_vma_test(db, end)
+        if t:
+            return t["vma"], "test", {}
+        paces = prog.estimate_vma(rep_sessions, a.threshold_pace, a.hr_max, end)
+        cardio = prog.vma_from_hr_fits(hr_fits, a.hr_max, end)
+        detail = {"paces": paces, "cardio": cardio}
+        if cardio:
+            return max(cardio["vma"], paces["vma"] if paces else 0), "cardio", detail
+        if paces:
+            return paces["vma"], "fractionnes", detail
+        return seuil, "seuil", detail
+
+    v_ret, source, det = retained(today)
+    paces_now, cardio_now = det.get("paces") or prog.estimate_vma(rep_sessions, a.threshold_pace, a.hr_max, today), \
+        det.get("cardio") or prog.vma_from_hr_fits(hr_fits, a.hr_max, today)
     vma = {
-        "fractionnes": vma_now["vma"] if vma_now else None,
-        "fractionnes_seances": vma_now["sessions"] if vma_now else [],
-        "seuil": (1000 / a.threshold_pace) / prog.THRESHOLD_VMA_FRACTION if a.threshold_pace else None,
+        "retenue": v_ret, "source": source, "test": test,
+        "fractionnes": paces_now["vma"] if paces_now else None,
+        "fractionnes_seances": paces_now["sessions"] if paces_now else [],
+        "cardio": cardio_now["vma"] if cardio_now else None,
+        "cardio_range": (cardio_now["vma_at_95"], cardio_now["vma_at_max"]) if cardio_now else None,
+        "cardio_date": cardio_now["date"] if cardio_now else None,
+        "seuil": seuil,
         "vo2max": (last_fit["vo2max"] / 3.5) / 3.6 if last_fit.get("vo2max") else None,  # Léger: VO2max ≈ 3.5 × VMA (km/h)
     }
     preds = {}
-    if vma["fractionnes"]:
-        preds["Fractionnés (VMA estimée)"] = prog.predict_from_vma(vma["fractionnes"], D)
-    if last_fit.get("p10"):
+    if v_ret:
+        preds[f"VMA retenue ({VMA_SOURCES[source]})"] = prog.predict_from_vma(v_ret, D)
+    if last_fit.get("p10") and source != "test":
         preds["COROS"] = last_fit["p10"]
-    if vma["seuil"]:
-        preds["Allure seuil COROS"] = prog.predict_from_vma(vma["seuil"], D)
+    if seuil and source not in ("test", "seuil"):
+        preds["Allure seuil COROS"] = prog.predict_from_vma(seuil, D)
     estimate = float(np.median(list(preds.values()))) if preds else None
 
     series = []
     for w in range(8, -1, -1):
         end = today - timedelta(weeks=w)
-        v = prog.estimate_vma(rep_sessions, a.threshold_pace, a.hr_max, end)
-        if v:
-            series.append((end, prog.predict_from_vma(v["vma"], D)))
+        v, _, _ = retained(end)
+        if v and v != seuil:
+            series.append((end, prog.predict_from_vma(v, D)))
     goal_day = date.fromisoformat(s.goal_date) if s.goal_date else None
-    proj = prog.projection_from_current(estimate, series, goal_day, today) if goal_day and estimate else None
+    spread = (max(preds.values()) - min(preds.values())) / 2 if len(preds) > 1 else 0.0
+    proj = prog.projection_from_current(estimate, series, goal_day, today, spread=spread) if goal_day and estimate else None
     probs = {}
     if proj:
         for label, t in (("A", s.goal_a), ("B", s.goal_b)):
             if t:
                 probs[label] = prog.prob_under(t, proj)
+    # Pace of the reps, session by session, grouped by what kind of session it was: progress on the work
+    # actually done, rather than heart-rate based indirect indicators.
+    rep_trend = []
+    for x in acts:
+        if (today - date.fromisoformat(x["date"])).days > 120:
+            continue
+        v = an[x["label_id"]]["verdict"]
+        work = [g for g in an[x["label_id"]]["metrics"].get("quality_segments") or []
+                if g.get("avg_pace") and g["duration_s"] >= 40 and g["avg_pace"] < a.threshold_pace * 1.14]
+        if work and v.get("type_fr") not in (None, "Footing", "Sortie longue", "Récupération", "Footing + accélérations"):
+            rep_trend.append({"date": x["date"], "category": v["type_fr"], "structure": v.get("structure"),
+                              "pace": float(np.median([g["avg_pace"] for g in work])),
+                              "best": float(min(g["avg_pace"] for g in work)), "n": len(work)})
+
     return {"athlete": a.__dict__ | {"lt_hr": a.lt_hr}, "ref_hr": ref_hr, "pace_at_hr": pace_hr, "ef_rows": ef_rows,
+            "rep_trend": sorted(rep_trend, key=lambda r: r["date"]),
             "best_efforts": eff90, "vma": vma, "estimate": estimate, "predictions": preds,
             "prediction_series": series, "projection": proj, "probabilities": probs}
+
+
+VMA_SOURCES = {"test": "test", "cardio": "FC-vitesse", "fractionnes": "allures des fractionnés", "seuil": "seuil COROS"}
+TEST_VALID_DAYS = 70
+
+
+def vma_tests(db: DB) -> list[dict]:
+    return json.loads(db.get_meta("vma_tests") or "[]")
+
+
+def latest_vma_test(db: DB, end: date) -> dict | None:
+    """Most recent field test done before `end` and less than 10 weeks old."""
+    ok = [t for t in vma_tests(db) if 0 <= (end - date.fromisoformat(t["date"])).days < TEST_VALID_DAYS]
+    return max(ok, key=lambda t: t["date"]) if ok else None
+
+
+def add_vma_test(db: DB, day: str, kind: str, vma: float, detail: str) -> None:
+    tests = [t for t in vma_tests(db) if t["date"] != day] + [{"date": day, "kind": kind, "vma": vma, "detail": detail}]
+    db.set_meta("vma_tests", json.dumps(sorted(tests, key=lambda t: t["date"])))
+
+
+def delete_vma_test(db: DB, day: str) -> None:
+    db.set_meta("vma_tests", json.dumps([t for t in vma_tests(db) if t["date"] != day]))
 
 
 def plan_view(db: DB, s: Settings, back: int = 14, ahead: int = 14) -> list[dict]:

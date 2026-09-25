@@ -5,28 +5,85 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from coach import service
-from common import BLUE, CRIT, GOOD, MUTED, ORANGE, ctx, fdate, fdur, fnum, fpace, pace_ticks, style, time_ticks, tint
+from coach.metrics import progress as prog
+from common import (BLUE, CRIT, GOOD, MUTED, ctx, fdate, fdur, fnum, fpace, pace_ticks, style, time_ticks, tint,
+                    TYPE_SYMBOLS, type_color)
 
 s, db = ctx()
 st.title("Progression")
 pr = service.progress(db, s)
 a = pr["athlete"]
-
 vma, est, proj = pr["vma"], pr["estimate"], pr["projection"]
 kmh = lambda v: f"{fnum(v * 3.6, 1)} km/h" if v else "—"  # noqa: E731
-with st.container(horizontal=True):
-    st.metric("VMA (fractionnés)", kmh(vma.get("fractionnes")), border=True,
-              delta=f"{fpace(1000 / vma['fractionnes'])}/km" if vma.get("fractionnes") else None, delta_color="off",
-              help="Déduite de tes deux meilleures séances de fractionné des 6 dernières semaines (répétitions isolées "
-                   "de la récup, ramenées à la VMA selon leur durée).")
-    st.metric("VMA (seuil COROS)", kmh(vma.get("seuil")), border=True,
-              help=f"Allure seuil COROS {fpace(a['threshold_pace'])}/km, le seuil se situant vers 87 % de VMA.")
-    st.metric("VMA équivalente VO2max", kmh(vma.get("vo2max")), border=True,
-              help="VO2max COROS / 3,5. Mesure le moteur aérobie, pas la vitesse spécifique : plus haute que ce que "
-                   "montrent tes allures, elle indique une marge de progression en vitesse.")
-    st.metric("10 km estimé", fdur(est) if est else "—", border=True,
-              help="Médiane des estimations ci-dessous.")
+SOURCE_TXT = {"test": "ton test", "cardio": "la relation FC-vitesse de ta meilleure séance",
+              "fractionnes": "les allures de tes fractionnés", "seuil": "ton allure seuil COROS"}
 
+# ---- VMA ------------------------------------------------------------------------------------------------
+st.subheader("Ta VMA", divider="gray")
+c1, c2 = st.columns([1, 3], vertical_alignment="center")
+with c1:
+    st.metric("VMA retenue", kmh(vma.get("retenue")), border=True,
+              delta=f"{fpace(1000 / vma['retenue'])}/km" if vma.get("retenue") else None, delta_color="off",
+              help="Celle qui sert aux prédictions et aux allures du plan.")
+with c2:
+    src = vma.get("source")
+    st.markdown(f"Retenue d'après **{SOURCE_TXT.get(src, src)}**.")
+    if src == "test":
+        t = vma["test"]
+        st.caption(f"Test du {fdate(t['date'])} ({t['detail']}). Il prime sur les estimations pendant 10 semaines.")
+    else:
+        st.caption("Pas de test récent : c'est une estimation. Un test de 6 minutes la remplacerait "
+                   "(bouton plus bas, et proposé dans la page Plan).")
+with st.container(horizontal=True):
+    if vma.get("test"):
+        st.metric("Test", kmh(vma["test"]["vma"]), border=True, help=vma["test"]["detail"])
+    rng = vma.get("cardio_range")
+    st.metric("FC-vitesse", kmh(vma.get("cardio")), border=True,
+              delta=f"{fnum(rng[0] * 3.6, 1)}–{fnum(rng[1] * 3.6, 1)} km/h" if rng else None, delta_color="off",
+              help="Échauffement et répétitions d'une même séance : la vitesse monte avec la FC presque en ligne droite. "
+                   "Prolongée jusqu'à 97 % de ta FC max, elle donne la vitesse à VO2max, même si les répétitions n'étaient "
+                   f"pas à fond. Fourchette : 95 % à 100 % de la FC max ({a['hr_max']:.0f} bpm, estimée)."
+                   + (f" Séance utilisée : {fdate(vma['cardio_date'])}." if vma.get("cardio_date") else ""))
+    st.metric("Allures des fractionnés", kmh(vma.get("fractionnes")), border=True,
+              help="Chaque répétition (tours de la montre) ramenée à la VMA selon sa durée : un 400 m se court vers 105 % "
+                   "de VMA, un 1000 m vers 98 %. C'est un plancher : ce que tu as couru, pas forcément ton maximum.")
+    st.metric("Seuil COROS", kmh(vma.get("seuil")), border=True,
+              help=f"Allure seuil COROS {fpace(a['threshold_pace'])}/km, le seuil se situant vers 87 % de VMA.")
+    st.metric("VO2max COROS", kmh(vma.get("vo2max")), border=True,
+              help="VO2max de la montre / 3,5. Estimation de la montre, souvent optimiste : non utilisée pour la VMA retenue.")
+
+with st.expander("Enregistrer un test de VMA", icon=":material/timer:"):
+    kind = st.radio("Type de test", list(prog.TEST_KINDS), format_func=prog.TEST_KINDS.get, key="t-kind")
+    day = st.date_input("Date", date.today(), max_value=date.today(), key="t-date", format="DD/MM/YYYY")
+    try:
+        if kind == "6min":
+            d = st.number_input("Distance parcourue en 6 minutes (m)", 1000, 2400, 1600, 10, key="t-6")
+            v, detail = prog.vma_from_test("6min", distance_m=d), f"test 6 min, {d} m"
+        elif kind == "effort":
+            cc1, cc2 = st.columns(2)
+            d = cc1.number_input("Distance (m)", 800, 21100, 3000, 100, key="t-d")
+            tt = cc2.text_input("Temps (min:s ou h:min:s)", "11:00", key="t-t")
+            parts = [int(x) for x in tt.strip().split(":")]
+            secs = parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 else parts[0] * 60 + parts[1]
+            v, detail = prog.vma_from_test("effort", distance_m=d, time_s=secs), f"{d} m en {tt}"
+        else:
+            k = st.number_input("VMA (km/h)", 12.0, 24.0, 16.0, 0.1, key="t-k")
+            v, detail = prog.vma_from_test("manuel", kmh=k), f"VMA saisie {fnum(k, 1)} km/h"
+        st.markdown(f"→ VMA **{kmh(v)}** ({fpace(1000 / v)}/km), 10 km estimé **{fdur(prog.predict_from_vma(v, s.goal_distance_m))}**")
+        if st.button("Enregistrer", type="primary", key="t-save"):
+            service.add_vma_test(db, day.isoformat(), kind, v, detail)
+            st.rerun()
+    except (ValueError, IndexError):
+        st.error("Temps au format 11:00 ou 1:05:30.")
+    for t in reversed(service.vma_tests(db)):
+        cc1, cc2 = st.columns([5, 1], vertical_alignment="center")
+        cc1.markdown(f"{fdate(t['date'])} · **{kmh(t['vma'])}** · {t['detail']}")
+        if cc2.button("Supprimer", key=f"del-{t['date']}"):
+            service.delete_vma_test(db, t["date"])
+            st.rerun()
+
+# ---- 10 km -------------------------------------------------------------------------------------------
+st.subheader("10 km", divider="gray")
 goal_day = date.fromisoformat(s.goal_date) if s.goal_date else None
 series = pr["prediction_series"]
 if series or proj:
@@ -41,7 +98,7 @@ if series or proj:
                         customdata=[fdur(proj["current"]), fdur(proj["projected"])],
                         hovertemplate="%{x|%d %b} : %{customdata}<extra></extra>")
     if series:
-        fig.add_scatter(x=[d for d, _ in series], y=[v for _, v in series], mode="lines+markers", name="Estimation fractionnés",
+        fig.add_scatter(x=[d for d, _ in series], y=[v for _, v in series], mode="lines+markers", name="Estimation (VMA)",
                         line=dict(color=MUTED, width=1.5), marker=dict(size=6),
                         customdata=[fdur(v) for _, v in series], hovertemplate="%{x|%d %b} : %{customdata}<extra></extra>")
     for t, name, color in ((s.goal_a, "Objectif A", CRIT), (s.goal_b, "Objectif B", GOOD)):
@@ -55,65 +112,56 @@ if series or proj:
     if pr["probabilities"]:
         p = pr["probabilities"]
         st.markdown(f"Chances d'atteindre l'objectif A : **{p.get('A', 0):.0%}** · l'objectif B : **{p.get('B', 0):.0%}**.")
-    st.caption("Courbe grise : 10 km estimé chaque semaine à partir des fractionnés des 6 semaines précédentes (elle bouge "
-               "surtout selon les séances qui entrent dans la fenêtre). Zone bleue : projection au jour J si le plan est suivi.")
-
+    st.caption("Courbe grise : 10 km déduit de la VMA retenue chaque semaine (sur les 6 semaines précédentes). "
+               "Zone bleue : projection au jour J si le plan est suivi, incertitude comprise.")
 preds = pr["predictions"]
 if preds:
-    st.subheader("Estimations 10 km", divider="gray")
     st.dataframe(pd.DataFrame([{"Méthode": k_, "Temps": fdur(v), "Allure": f"{fpace(v / 10)}/km"} for k_, v in preds.items()]),
                  hide_index=True)
 
-v_ref = vma.get("fractionnes") or vma.get("seuil")
+# ---- rep paces over time -------------------------------------------------------------------------------
+trend = pd.DataFrame([r for r in pr.get("rep_trend") or [] if not r["category"].startswith("Sortie longue")])
+if len(trend):
+    st.subheader("Allure de tes répétitions", divider="gray")
+    fig = go.Figure()
+    for cat, g in trend.groupby("category"):
+        fig.add_scatter(x=pd.to_datetime(g["date"]), y=g["pace"], mode="markers+lines", name=cat,
+                        line=dict(color=type_color(cat), width=1.5),
+                        marker=dict(size=11, color=type_color(cat), symbol=TYPE_SYMBOLS.get(cat, "circle")),
+                        customdata=list(zip(g["pace"].map(fpace), g["best"].map(fpace), g["structure"].fillna(""))),
+                        hovertemplate="%{x|%d %b} · %{customdata[2]}<br>médiane %{customdata[0]}/km · meilleure %{customdata[1]}/km"
+                                      "<extra>" + cat + "</extra>")
+    style(fig, 320, "pace").update_layout(title="Allure médiane des répétitions, par type de séance", hovermode="closest")
+    pace_ticks(fig, trend["pace"].tolist())
+    st.plotly_chart(fig, width="stretch")
+    st.caption("Un point par séance. Plus haut = plus rapide. À comparer entre séances du même type.")
+
+# ---- training paces ------------------------------------------------------------------------------------
+v_ref = vma.get("retenue")
 if v_ref:
     st.subheader("Tes allures d'entraînement", divider="gray")
-    vma_pace = 1000 / v_ref
+    vp = 1000 / v_ref
     rows = [
-        ("VMA (100 %)", vma_pace, "Référence : l'allure tenable ~6 min."),
-        ("Répétitions 400 m (~105 %)", vma_pace / 1.05, "VMA courte."),
-        ("Répétitions 1000 m (~98 %)", vma_pace / 0.98, "VMA longue."),
-        ("Allure 10 km actuelle", est / 10 if est else None, "Ce que tu tiendrais aujourd'hui sur 10 km."),
-        ("Objectif A", s.goal_a / 10 if s.goal_a else None, "Sub-40."),
-        ("Objectif B", s.goal_b / 10 if s.goal_b else None, ""),
-        ("Seuil", a["threshold_pace"], "Tenable ~1 h (COROS)."),
-        ("Endurance (Z2)", None, "Voir les zones sur la page Aujourd'hui."),
+        ("VMA courte : 200-400 m, 30/30", vp / 1.07, vp / 1.03, "103-107 % VMA"),
+        ("VMA longue : 800-1200 m, 3-4 min", vp / 1.00, vp / 0.96, "96-100 % VMA"),
+        ("Allure 10 km actuelle", est / 10 if est else None, None, "ce que tu tiendrais aujourd'hui"),
+        ("Objectif A / B", s.goal_a / 10 if s.goal_a else None, s.goal_b / 10 if s.goal_b else None, "sub-40 / 41:30"),
+        ("Seuil", a["threshold_pace"] - 5, a["threshold_pace"] + 5, "tenable ~1 h (COROS)"),
+        ("Endurance (Z2)", None, None, "zones sur la page Aujourd'hui"),
     ]
-    st.dataframe(pd.DataFrame([{"Allure": n, "min/km": f"{fpace(p_)}" if p_ else "—", "Repère": c_} for n, p_, c_ in rows]),
-                 hide_index=True, width="stretch")
-
-c1, c2 = st.columns(2)
-ph = pr["pace_at_hr"]
-if len(ph):
-    fig = go.Figure(go.Scatter(x=ph["date"], y=ph["pace_at_hr"], mode="markers+lines", line=dict(color=BLUE, width=2),
-                               customdata=ph["pace_at_hr"].map(fpace), hovertemplate="%{x|%d %b} : %{customdata}/km<extra></extra>"))
-    style(fig, 280, "pace").update_layout(title=f"Allure à {pr['ref_hr']} bpm (footings et sorties longues)", showlegend=False)
-    pace_ticks(fig, ph["pace_at_hr"].tolist())
-    c1.plotly_chart(fig, width="stretch")
-    c1.caption("Si la courbe monte (allure plus rapide à la même FC), ton moteur aérobie progresse. C'est l'indicateur le plus fiable.")
-else:
-    c1.info(f"Pas assez de footings avec une FC moyenne proche de {pr['ref_hr']} bpm pour tracer la tendance.")
-
-ef = pd.DataFrame(pr["ef_rows"])
-if len(ef):
-    ef["date"] = pd.to_datetime(ef["date"])
-    ef = ef.sort_values("date")
-    fig = go.Figure(go.Scatter(x=ef["date"], y=ef["ef"], mode="markers", marker=dict(color=ORANGE, size=8), name="Efficacité",
-                               hovertemplate="%{x|%d %b} : %{y:.2f}<extra></extra>"))
-    if len(ef) >= 4:
-        fig.add_scatter(x=ef["date"], y=ef["ef"].rolling(4, min_periods=2).mean(), mode="lines", name="Moyenne sur 4",
-                        line=dict(color=ORANGE, width=2))
-    style(fig, 280).update_layout(title="Efficacité (m/min par battement) en endurance")
-    c2.plotly_chart(fig, width="stretch")
+    st.dataframe(pd.DataFrame([{"Allure": n, "min/km": (f"{fpace(lo)}" + (f" – {fpace(hi)}" if hi else "")) if lo else "—",
+                                "Repère": c_} for n, lo, hi, c_ in rows]), hide_index=True, width="stretch")
+    st.caption("Toutes les séances de fractionné possibles, calculées sur cette VMA : page **Séances types**.")
 
 be = pr["best_efforts"]
 if be:
-    st.subheader("Meilleurs efforts (90 jours)")
+    st.subheader("Meilleurs efforts (90 jours)", divider="gray")
     names = {"400": "400 m", "1000": "1 km", "1609": "1 mile", "3000": "3 km", "5000": "5 km", "10000": "10 km", "21097": "Semi"}
     st.dataframe(pd.DataFrame([{"Distance": names.get(k_, k_), "Temps": fdur(t), "Allure": f"{fpace(t / (int(k_) / 1000))}/km",
                                 "Date": fdate(d)} for k_, (t, d) in sorted(be.items(), key=lambda kv: int(kv[0]))]),
                  hide_index=True, width="stretch")
-    st.caption("Meilleurs temps mesurés à l'intérieur d'une seule portion rapide (jamais à cheval sur une récupération) : "
-               "ce ne sont pas des courses, les distances longues n'apparaissent que si tu les as courues d'une traite.")
+    st.caption("Meilleurs temps mesurés à l'intérieur d'une seule répétition ou d'un seul bloc (jamais à cheval sur une "
+               "récupération) : ce ne sont pas des courses.")
 
 st.caption(f"Profil : FC max {a['hr_max']:.0f} bpm · FC repos {a['hr_rest']:.0f} bpm · FC seuil {a['lt_hr']:.0f} bpm · "
            f"allure seuil {fpace(a['threshold_pace'])}/km — détails et zones sur la page **Aujourd'hui**.")

@@ -172,21 +172,78 @@ def evaluate_steps(course: dict, df: pd.DataFrame, laps: list[dict], threshold_p
     }
 
 
+LAP_ACTIVE, LAP_REST, LAP_WARMUP, LAP_COOLDOWN = 0, 1, 2, 3  # FIT lap "intensity"
+
+
+def _hr_mean(hr: np.ndarray, s: int, e: int) -> float | None:
+    seg = hr[s:e + 1]
+    return float(np.nanmean(seg)) if len(seg) and not np.all(np.isnan(seg)) else None
+
+
+def segments_from_laps(df: pd.DataFrame, laps: list[dict], threshold_pace: float,
+                       max_ratio: float = 1.14) -> list[dict] | None:
+    """Reps straight from the watch laps, when the laps describe them: a structured workout (laps tagged
+    warm-up / active / rest / cool-down) or manual laps. Distance and time are the watch's own, the numbers
+    shown in the COROS app — GPS-stream detection trims reps a few metres short and blurs their edges. A lap
+    is a rep if it's faster than 114 % of threshold pace (and active, when laps are tagged); consecutive fast
+    laps are one continuous effort. Auto-laps every km (or mile) say nothing about reps: returns None."""
+    if len(laps) < 3 or df.empty:
+        return None
+    body = [lp.get("distance_m") or 0 for lp in laps[:-1]]
+    if all(abs(d - 1000) < 40 for d in body) or all(abs(d - 1609) < 60 for d in body):
+        return None
+    tagged = any(lp.get("intensity") in (LAP_REST, LAP_WARMUP, LAP_COOLDOWN) for lp in laps)
+    ts = df["timestamp"]
+    hr = df["hr"].to_numpy(dtype=float)
+    groups: list[list[dict]] = []
+    prev_fast = False
+    for lp in laps:
+        d, t = lp.get("distance_m") or 0, lp.get("timer_s") or lp.get("elapsed_s") or 0
+        fast = (d >= 100 and t >= 20 and t / d * 1000 < threshold_pace * max_ratio
+                and (not tagged or lp.get("intensity") in (LAP_ACTIVE, None)))
+        if fast:
+            if prev_fast:
+                groups[-1].append(lp)
+            else:
+                groups.append([lp])
+        prev_fast = fast
+    if len(groups) < 1 or (len(groups) == 1 and not tagged and len(laps) > 3):
+        return None
+    out = []
+    for g in groups:
+        d = sum(lp["distance_m"] for lp in g)
+        t = sum(lp.get("timer_s") or lp.get("elapsed_s") for lp in g)
+        s_i = int(ts.searchsorted(pd.Timestamp(g[0]["start_time"])))
+        end_t = g[-1].get("end_time") or (pd.Timestamp(g[-1]["start_time"]) + pd.Timedelta(seconds=g[-1].get("elapsed_s") or t))
+        e_i = max(s_i, min(len(df) - 1, int(ts.searchsorted(pd.Timestamp(end_t))) - 1))
+        lap_hr = [lp["avg_hr"] for lp in g if lp.get("avg_hr")]
+        out.append({"start_idx": s_i, "end_idx": e_i, "duration_s": float(t), "distance_m": float(d),
+                    "avg_pace": t / d * 1000, "source": "tour",
+                    "avg_hr": float(np.average(lap_hr, weights=[lp.get("timer_s") or 1 for lp in g if lp.get("avg_hr")]))
+                    if lap_hr else _hr_mean(hr, s_i, e_i)})
+    return out
+
+
 def quality_segments(df: pd.DataFrame, threshold_pace: float, gate: float = QUALITY_GATE,
-                      min_dur_s: float = 15, merge_gap_s: float = 20) -> list[dict]:
-    """Contiguous stretches of sustained fast running (pace at or under `gate` fraction of threshold pace),
-    merging brief dips (GPS/pace noise, well under a real recovery) and dropping stretches too short to be
-    a real rep. This is the "real repetitions" of a session whether or not a plan course exists — it's how
-    an off-plan quality session gets evaluated and typed, and how best-effort extraction (session.py) avoids
-    diluting fast reps with the recovery jog between them."""
+                      min_dur_s: float = 15, merge_gap_s: float = 20, laps: list[dict] | None = None) -> list[dict]:
+    """The real repetitions of a session, whether or not a plan course exists — how an off-plan session gets
+    typed and evaluated, and how best-effort extraction (session.py) avoids diluting fast reps with the
+    recovery between them. Watch laps first (segments_from_laps); otherwise contiguous stretches of sustained
+    fast running (at or under `gate` fraction of threshold pace) in the GPS stream, merging brief dips and
+    trimmed to the steady core of each rep (the acceleration and slowing-down at its edges would otherwise
+    make every rep look several s/km slower than it was)."""
     if df.empty:
         return []
+    if laps:
+        from_laps = segments_from_laps(df, laps, threshold_pace)
+        if from_laps is not None:
+            return [s for s in from_laps if s["duration_s"] >= min_dur_s]
     speed = df["speed"].fillna(0).to_numpy()
     t = df["elapsed"].to_numpy()
     dist = df["distance"].to_numpy()
     hr = df["hr"].to_numpy(dtype=float)
     # a short rolling smooth so one noisy GPS sample doesn't split a rep in two
-    sm = pd.Series(speed).rolling(7, min_periods=1, center=True).mean().to_numpy()
+    sm = pd.Series(speed).rolling(5, min_periods=1, center=True).mean().to_numpy()
     gate_speed = gate * 1000 / threshold_pace
     idx = np.flatnonzero(sm >= gate_speed)
     if not len(idx):
@@ -200,14 +257,20 @@ def quality_segments(df: pd.DataFrame, threshold_pace: float, gate: float = QUAL
     spans.append((start, prev))
     out = []
     for s, e in spans:
+        if t[e] - t[s] >= 20:  # trim the ramps: keep from first to last second at >= 94 % of the rep's median speed
+            core = np.median(sm[s:e + 1])
+            ok = np.flatnonzero(sm[s:e + 1] >= 0.94 * core)
+            if len(ok):
+                s, e = s + int(ok[0]), s + int(ok[-1])
         dur = float(t[e] - t[s])
         if dur < min_dur_s:
             continue
         d = float(dist[e] - dist[s])
-        seg_hr = hr[s:e + 1]
+        if d > 150 and dur / d * 1000 < 170:  # > 21 km/h held over 150 m: a GPS jump, not a rep
+            continue
         out.append({"start_idx": int(s), "end_idx": int(e), "duration_s": dur, "distance_m": d,
-                    "avg_pace": dur / d * 1000 if d > 0 else None,
-                    "avg_hr": float(np.nanmean(seg_hr)) if not np.all(np.isnan(seg_hr)) else None})
+                    "avg_pace": dur / d * 1000 if d > 0 else None, "source": "flux",
+                    "avg_hr": _hr_mean(hr, s, e)})
     return out
 
 

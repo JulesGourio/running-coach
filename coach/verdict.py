@@ -52,19 +52,91 @@ def hard_segments(metrics: dict, a: Athlete) -> list[dict]:
             if s.get("avg_pace") and s["avg_pace"] < a.threshold_pace * 1.14]
 
 
-def libre_subtype(segs: list[dict], a: Athlete, distance_m: float) -> str:
-    """Session type from the median rep pace relative to threshold pace (median: one fast or slow rep
-    doesn't relabel the session)."""
-    paces = sorted(s["avg_pace"] for s in segs)
-    ratio = paces[len(paces) // 2] / a.threshold_pace
-    durs = sorted(s["duration_s"] for s in segs)
-    if distance_m >= 15000:
-        return "Sortie longue avec allure spécifique" if ratio < 1.0 else "Sortie longue avec tempo"
-    if ratio < 0.93 or (len(segs) >= 4 and durs[len(durs) // 2] <= 150 and ratio < 1.0):
-        return "VMA"  # short reps faster than threshold are VMA work by structure, even if run conservatively
-    if ratio < 0.98:
-        return "Allure spécifique 10 km"
-    return "Seuil" if ratio < 1.05 else "Tempo"
+CATEGORIES = ["Récupération", "Footing", "Footing + accélérations", "Sortie longue", "Sortie longue avec allure",
+              "VMA courte", "VMA longue", "Allure spécifique", "Seuil", "Tempo", "Fartlek", "Côtes", "Course / effort à fond"]
+
+
+def _median(xs: list[float]) -> float:
+    xs = sorted(xs)
+    return xs[len(xs) // 2] if len(xs) % 2 else (xs[len(xs) // 2 - 1] + xs[len(xs) // 2]) / 2
+
+
+def _dist(m: float) -> str:
+    if m < 1000:
+        return f"{round(m / 50) * 50:.0f} m"
+    km = round(m / 100) / 10
+    return (f"{km:g}".replace(".", ",")) + " km"
+
+
+def _dur(s: float) -> str:
+    return f"{round(s / 60):.0f} min" if abs(s / 60 - round(s / 60)) < 0.08 and s >= 120 else f"{int(s // 60)}:{int(round(s % 60)):02d}"
+
+
+def structure(segs: list[dict]) -> str:
+    """What was run, e.g. "12 × 400 m", "5 × 3 min", "3 × 2 km", "8 km continu"."""
+    n = len(segs)
+    if not n:
+        return ""
+    d, t = [s["distance_m"] for s in segs], [s["duration_s"] for s in segs]
+    md, mt = _median(d), _median(t)
+    if n == 1:
+        return f"{_dist(md)} continu"
+    if all(abs(x - md) <= 0.08 * md for x in d):
+        return f"{n} × {_dist(md)}"
+    if all(abs(x - mt) <= 0.10 * mt for x in t):
+        return f"{n} × {_dur(mt)}"
+    return f"{n} efforts de {_dist(min(d))} à {_dist(max(d))}"
+
+
+def describe_done(metrics: dict, a: Athlete, sport_type: int | None = None) -> dict:
+    """Session type from what was actually run, whatever the plan said: the detected reps (watch laps or
+    GPS stream), their duration, their pace relative to threshold pace and their slope."""
+    dist, mov = metrics.get("distance_m") or 0, metrics.get("moving_s") or 0
+    suffix = {101: " (tapis)", 102: " (trail)", 103: " (piste)"}.get(sport_type or 0, "")
+    thr = a.threshold_pace
+    long_run = dist >= 16000 or mov >= 75 * 60
+    segs = hard_segments(metrics, a)
+    # downhill stretches (trail) are fast without being an effort
+    work = [s for s in segs if s["duration_s"] >= 40 and s.get("grade", 0) > -0.04]
+    strides = [s for s in metrics.get("quality_segments") or [] if s["duration_s"] < 40 and s.get("avg_pace")
+               and s["avg_pace"] < thr]
+    fast_s = sum(s["duration_s"] for s in work if s["avg_pace"] < thr * 1.05)
+    tempo_s = sum(s["duration_s"] for s in work)
+    if fast_s < 180 and tempo_s < 900:
+        z2_slow = a.pace_zone_bounds()[1][2]
+        if long_run:
+            cat = "Sortie longue"
+        elif len(strides) >= 3:
+            cat = "Footing + accélérations"
+        elif mov < 35 * 60 and (metrics.get("avg_pace") or 0) > z2_slow:
+            cat = "Récupération"
+        else:
+            cat = "Footing"
+        return {"category": cat, "structure": "", "label": f"{cat}{suffix} · {_dist(dist)}" if dist else cat + suffix}
+    r = _median([s["avg_pace"] for s in work]) / thr
+    d_med = _median([s["duration_s"] for s in work])
+    n = len(work)
+    durs = [s["duration_s"] for s in work]
+    cv = (sum((x - sum(durs) / n) ** 2 for x in durs) / n) ** 0.5 / (sum(durs) / n)
+    if long_run and tempo_s < 0.6 * mov:
+        cat = "Sortie longue avec allure"
+    elif n >= 3 and _median([s.get("grade", 0) for s in work]) >= 0.04:
+        cat = "Côtes"
+    elif n == 1 or (n == 2 and d_med >= 900):
+        cat = ("Course / effort à fond" if r < 0.93 and d_med >= 600 else "Allure spécifique" if r < 0.98
+               else "Seuil" if r < 1.05 else "Tempo")
+    elif n >= 4 and cv > 0.35:
+        cat = "Fartlek"
+    elif d_med <= 120 and r < 1.0:
+        cat = "VMA courte"
+    elif d_med <= 360 and r < 0.97:
+        cat = "VMA longue"
+    else:
+        cat = "Allure spécifique" if r < 0.97 else "Seuil" if r < 1.05 else "Tempo"
+    struct = structure(work)
+    if cat == "Sortie longue avec allure":
+        struct = f"{_dist(dist)} dont {_dist(sum(s['distance_m'] for s in work))} rapides"
+    return {"category": cat, "structure": struct, "label": f"{cat}{suffix} · {struct}"}
 
 
 TYPE_FR = {"footing": "Footing", "longue": "Sortie longue", "longue_specifique": "Sortie longue avec allure spécifique",
@@ -72,12 +144,12 @@ TYPE_FR = {"footing": "Footing", "longue": "Sortie longue", "longue_specifique":
            "qualite_libre": "Séance intense (hors plan)"}
 
 
-def judge(metrics: dict, a: Athlete, course: dict | None = None, df=None, laps=None) -> dict:
+def judge(metrics: dict, a: Athlete, course: dict | None = None, df=None, laps=None, sport_type: int | None = None) -> dict:
     kind = classify(course, metrics, a)
+    done_type = describe_done(metrics, a, sport_type)
     findings: list[str] = []
     flags: list[str] = []
     score = 10.0
-    subtype_fr: str | None = None
     libre_segments: list[dict] = []
     z = metrics.get("zones_hr") or {}
     easy_share = z.get("Z1 récup", 0) + z.get("Z2 endurance", 0)
@@ -154,9 +226,9 @@ def judge(metrics: dict, a: Athlete, course: dict | None = None, df=None, laps=N
         segs = hard_segments(metrics, a)
         paces = [sg["avg_pace"] for sg in segs]
         if paces:
-            subtype_fr = libre_subtype(segs, a, metrics.get("distance_m") or 0)
             n, total_m = len(segs), sum(sg.get("distance_m") or 0 for sg in segs)
-            unit, e = ("bloc", "") if subtype_fr.startswith(("Sortie longue", "Tempo")) else ("répétition", "e")
+            unit, e = (("bloc", "") if done_type["category"].startswith(("Sortie longue", "Tempo", "Seuil", "Course"))
+                       else ("répétition", "e"))
             pl = "s" if n > 1 else ""
             findings.append(f"{n} {unit}{pl} rapide{pl} détecté{e}{pl} "
                             f"({fkm(total_m)} au total), {fpace(sum(paces) / len(paces))}/km en moyenne "
@@ -169,10 +241,10 @@ def judge(metrics: dict, a: Athlete, course: dict | None = None, df=None, laps=N
                 if paces[-1] < paces[0] - 3:
                     findings.append(f"Finie plus vite qu'entamée ({fpace(paces[0])} → {fpace(paces[-1])}/km) : bonne gestion.")
             libre_segments = [{"n": i + 1, "duration_s": sg["duration_s"], "distance_m": sg.get("distance_m"),
-                               "pace": sg.get("avg_pace"), "avg_hr": sg.get("avg_hr")} for i, sg in enumerate(segs)]
+                               "pace": sg.get("avg_pace"), "avg_hr": sg.get("avg_hr"), "source": sg.get("source")}
+                              for i, sg in enumerate(segs)]
         else:
             findings.append(f"Séance intense hors plan : {1 - easy_share:.0%} du temps au-dessus de Z2.")
-        flags.append("hors_plan")
         score = None
 
     if metrics.get("hr_p99") and metrics["hr_p99"] > a.hr_max + 2:
@@ -180,11 +252,11 @@ def judge(metrics: dict, a: Athlete, course: dict | None = None, df=None, laps=N
         findings.append(f"FC jusqu'à {metrics['hr_p99']:.0f} bpm, au-dessus de la FC max configurée : "
                         "vérifie le capteur ou mets à jour ATHLETE_HR_MAX.")
 
-    if score is not None:
+    if not course:
+        flags.append("hors_plan")
+        score = None  # a mark only means "how well the plan was followed": nothing to compare without a plan
+    elif score is not None:
         score = round(max(0.0, min(10.0, score)), 1)
-    type_fr = f"{subtype_fr} (hors plan)" if subtype_fr else TYPE_FR.get(kind, kind)
-    headline = type_fr
-    if score is not None:
-        headline += f" · {score:.1f}/10".replace(".", ",")
-    return {"type": kind, "type_fr": type_fr, "score": score, "headline": headline,
-            "findings": findings, "flags": flags, "planned": planned, "reps": reps, "segments": libre_segments}
+    return {"type": kind, "type_fr": done_type["category"], "structure": done_type["structure"],
+            "headline": done_type["label"], "score": score, "findings": findings, "flags": flags,
+            "planned": planned, "reps": reps, "segments": libre_segments}

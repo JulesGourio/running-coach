@@ -38,29 +38,33 @@ with st.container(horizontal=True):
     if probs:
         st.metric("Chances d'y arriver", f"A {probs.get('A', 0):.0%} · B {probs.get('B', 0):.0%}", border=True,
                   help="Probabilité que la projection passe sous chaque objectif, compte tenu de la fourchette.")
-    if vma.get("fractionnes"):
-        st.metric("VMA estimée", f"{fnum(vma['fractionnes'] * 3.6, 1)} km/h", border=True,
-                  delta=f"{fpace(1000 / vma['fractionnes'])}/km", delta_color="off",
-                  help="Vitesse maximale aérobie, déduite de tes deux meilleures séances de fractionné des 6 dernières "
-                       "semaines : chaque répétition est ramenée à la VMA selon sa durée (un 400 m se court vers 105 % "
-                       "de VMA, un 1000 m vers 98 %, un 2000 m vers 93 %).")
+    if vma.get("retenue"):
+        src = {"test": "test", "cardio": "FC-vitesse", "fractionnes": "allures", "seuil": "seuil COROS"}[vma["source"]]
+        st.metric("VMA retenue", f"{fnum(vma['retenue'] * 3.6, 1)} km/h", border=True,
+                  delta=f"{fpace(1000 / vma['retenue'])}/km · {src}", delta_color="off",
+                  help="Vitesse maximale aérobie. Un test récent prime ; sinon la relation FC-vitesse de ta meilleure "
+                       "séance de fractionné (ou, à défaut, les allures courues). Détail et saisie d'un test : page Progression.")
 
 with st.expander("Comment ces chiffres sont calculés", icon=":material/calculate:"):
     rows = [{"Méthode": k, "10 km": fdur(v), "Allure": f"{fpace(v / 10)}/km"} for k, v in pr["predictions"].items()]
     st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
     lines = []
+    if vma.get("test"):
+        lines.append(f"- **Test du {fdate(vma['test']['date'])}** : {vma['test']['detail']} → VMA {fnum(vma['test']['vma'] * 3.6, 1)} km/h.")
+    if vma.get("cardio"):
+        lo_, hi_ = vma["cardio_range"]
+        lines.append(f"- **Relation FC-vitesse** (séance du {fdate(vma['cardio_date'])}) : VMA {fnum(vma['cardio'] * 3.6, 1)} km/h "
+                     f"(entre {fnum(lo_ * 3.6, 1)} et {fnum(hi_ * 3.6, 1)} selon la FC atteinte à VMA).")
     if vma.get("fractionnes"):
-        lines.append(f"- **Fractionnés** : VMA {fnum(vma['fractionnes'] * 3.6, 1)} km/h tirée de tes séances du "
-                     + " et du ".join(fdate(d) for d in vma["fractionnes_seances"])
-                     + ", puis 10 km couru à ~90 % de VMA (part de VMA tenable sur ~40 min).")
+        lines.append(f"- **Allures des fractionnés** (tours de la montre, {' et '.join(fdate(d) for d in vma['fractionnes_seances'])}) : "
+                     f"VMA {fnum(vma['fractionnes'] * 3.6, 1)} km/h — un plancher, ce que tu as couru.")
     if vma.get("seuil"):
         lines.append(f"- **Allure seuil COROS** ({fpace(pr['athlete']['threshold_pace'])}/km) : le seuil se situe vers 87 % "
-                     f"de VMA, soit une VMA de {fnum(vma['seuil'] * 3.6, 1)} km/h.")
+                     f"de VMA, soit {fnum(vma['seuil'] * 3.6, 1)} km/h.")
     if vma.get("vo2max"):
-        lines.append(f"- **VO2max COROS** : elle correspondrait à une VMA de {fnum(vma['vo2max'] * 3.6, 1)} km/h "
-                     "(VO2max ≈ 3,5 × VMA). C'est nettement au-dessus de ce que montrent tes fractionnés : le moteur "
-                     "aérobie est là (volume, randonnée), c'est la vitesse spécifique qui reste à construire. "
-                     "Elle n'entre pas dans l'estimation.")
+        lines.append(f"- **VO2max COROS** : {fnum(vma['vo2max'] * 3.6, 1)} km/h (VO2max ≈ 3,5 × VMA). Estimation de la montre, "
+                     "au-dessus des autres : non retenue. Un test de 6 minutes tranchera.")
+    lines.append("- **10 km** : la VMA est convertie en temps de course selon la part tenable sur la durée (~90 % sur 40 min).")
     st.markdown("\n".join(lines))
     st.caption("Pas de course ni d'effort continu 5/10 km cette année : tout part des répétitions, isolées de la "
                "récupération. La projection suppose que le plan est suivi.")
@@ -131,13 +135,14 @@ if alerts:
 
 # ---- Recent sessions -------------------------------------------------------------------------------
 st.subheader("Dernières séances", divider="gray")
-table = pd.DataFrame([{"Date": fdate(x["date"]), "Type": x["kind_fr"] or "—", "Séance": x["name"],
-                       "Km": x["distance_km"], "Note": x["score"], "Constat": (x["findings"] or [""])[0]}
+table = pd.DataFrame([{"Date": fdate(x["date"]), "Type": x["kind_fr"] or "—", "Contenu": x.get("structure") or "",
+                       "Km": x["distance_km"], "Plan": (f"{fnum(x['score'])}/10" if x["score"] is not None else "prévue")
+                       if x.get("planned") else "hors plan", "Constat": (x["findings"] or [""])[0]}
                       for x in recent])
 if len(table):
     st.dataframe(color_types(table), hide_index=True, width="stretch",
-                 column_config={"Note": st.column_config.ProgressColumn("Note", min_value=0, max_value=10, format="%.1f"),
-                                "Km": st.column_config.NumberColumn("Km", format="%.1f"),
+                 column_config={"Km": st.column_config.NumberColumn("Km", format="%.1f"),
+                                "Plan": st.column_config.TextColumn("Plan", help="Respect du plan sur 10, pour les séances prévues."),
                                 "Constat": st.column_config.TextColumn("Constat", width="large")})
 
 # ---- Profile & zones -------------------------------------------------------------------------------

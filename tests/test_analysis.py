@@ -119,3 +119,27 @@ def test_readiness_flags_low_hrv():
     good = readiness(base + [{"date": "2026-09-25", "hrv": 86, "rhr": 52, "sleep_score": 88}], tsb=0)
     bad = readiness(base + [{"date": "2026-09-25", "hrv": 58, "rhr": 60, "sleep_score": 55}], tsb=-25)
     assert good["level"] == "vert" and bad["level"] == "rouge" and len(bad["reasons"]) >= 3
+
+
+def test_vma_from_heart_rate_speed_line():
+    from coach.metrics.session import compute_session_metrics
+    from coach.metrics.zones import Athlete
+    from tests.synth import build
+    segs = [{"pace": 360, "hr": 138, "sec": 900}]
+    for _ in range(5):
+        segs += [{"pace": 240, "hr": 182, "m": 1000}, {"pace": 420, "hr": 150, "sec": 120}]
+    df, _ = build(segs)
+    a = Athlete(hr_max=200, hr_rest=55, lthr=188, threshold_pace=262)
+    fit = compute_session_metrics(df, a)["hr_speed"]
+    assert fit and fit["r2"] > 0.95 and fit["slope"] > 0
+    v = prog.vma_from_hr_fits([(date(2026, 9, 24), fit)], 200, date(2026, 9, 25))
+    # reps at 15 km/h with HR in the low 180s: extrapolated to 97 % of 200 bpm, clearly faster than the reps
+    assert 15.5 < v["vma"] * 3.6 < 18 and v["vma_at_95"] < v["vma"] < v["vma_at_max"]
+    assert prog.vma_from_hr_fits([(date(2026, 9, 24), {**fit, "r2": 0.5})], 200, date(2026, 9, 25)) is None
+
+
+def test_vma_from_field_tests():
+    assert prog.vma_from_test("6min", distance_m=1700) * 3.6 == pytest.approx(17.0)
+    assert 17.4 < prog.vma_from_test("effort", distance_m=3000, time_s=630) * 3.6 < 17.8
+    assert prog.vma_from_test("effort", distance_m=1500, time_s=320) * 3.6 == pytest.approx(16.875)
+    assert prog.vma_from_test("manuel", kmh=17) == pytest.approx(17 / 3.6)

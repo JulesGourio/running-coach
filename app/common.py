@@ -103,12 +103,16 @@ ZONE_COLORS = {"Z1 récup": "#94a3b8", "Z2 endurance": "#2e6fdb", "Z3 tempo": "#
                "Z4 seuil": "#ea8a0c", "Z5 VO2max": "#dc2626"}
 
 # Session type → color, matched on the start of the French label.
-TYPE_COLORS = [("VMA", "#dc2626"), ("Seuil", "#ea8a0c"), ("Tempo", "#d97706"), ("Allure", "#9333ea"),
-               ("Sortie longue", "#0d9488"), ("Course", "#111827"), ("Footing", "#2e6fdb")]
+TYPE_COLORS = [("VMA courte", "#ef4444"), ("VMA longue", "#9f1239"), ("VMA", "#dc2626"), ("Côtes", "#7f1d1d"),
+               ("Seuil", "#ea8a0c"), ("Tempo", "#a16207"), ("Allure", "#7c3aed"), ("Fartlek", "#db2777"),
+               ("Sortie longue", "#0d9488"), ("Course", "#111827"), ("Footing", "#2e6fdb"), ("Récupération", "#94a3b8")]
+TYPE_SYMBOLS = {"VMA courte": "circle", "VMA longue": "diamond", "Seuil": "square", "Tempo": "triangle-up",
+                "Allure spécifique": "star", "Fartlek": "x", "Côtes": "triangle-down", "Course / effort à fond": "hexagram"}
 
 
-TYPE_BADGES = [("VMA", "red"), ("Seuil", "orange"), ("Tempo", "orange"), ("Allure", "violet"),
-               ("Sortie longue", "green"), ("Course", "gray"), ("Footing", "blue")]
+TYPE_BADGES = [("VMA", "red"), ("Côtes", "red"), ("Seuil", "orange"), ("Tempo", "orange"), ("Allure", "violet"),
+               ("Fartlek", "violet"), ("Sortie longue", "green"), ("Course", "primary"), ("Footing", "blue"),
+               ("Récupération", "gray")]
 
 
 def type_badge(label: str | None) -> str:

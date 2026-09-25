@@ -110,7 +110,38 @@ def decoupling(df: pd.DataFrame, gap_speed: np.ndarray, moving: np.ndarray) -> d
     }
 
 
-def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None = None) -> dict:
+def hr_speed_fit(hr: np.ndarray, gap_speed: np.ndarray, moving: np.ndarray, segments: list[dict]) -> dict | None:
+    """Grade-adjusted speed against heart rate within one interval session: 60 s steady windows of the warm-up
+    (after 5 min, before the first rep) and the second half of each rep of 2 min or more (heart rate lags at the
+    start of an effort). Same day, same conditions: the line is clean enough to extrapolate towards max HR, which
+    gives the speed at VO2max even when the reps weren't run flat out."""
+    reps = [g for g in segments if g["duration_s"] >= 120]
+    if len(reps) < 2 or np.isnan(hr).all():
+        return None
+    pts = []
+    for st in range(300, reps[0]["start_idx"] - 60, 60):
+        w = slice(st, st + 60)
+        if moving[w].mean() > 0.95 and np.std(gap_speed[w]) < 0.3 and np.isnan(hr[w]).mean() < 0.2:
+            pts.append((float(np.nanmean(hr[w])), float(np.mean(gap_speed[w]))))
+    n_wu = len(pts)
+    for g in reps:
+        n = g["end_idx"] - g["start_idx"]
+        w = slice(g["start_idx"] + n // 2, g["end_idx"] + 1)
+        if np.isnan(hr[w]).mean() < 0.2:
+            pts.append((float(np.nanmean(hr[w])), float(np.mean(gap_speed[w]))))
+    if n_wu < 3 or len(pts) - n_wu < 2:
+        return None
+    x, y = np.array([p[0] for p in pts]), np.array([p[1] for p in pts])
+    if x.max() - x.min() < 25:
+        return None
+    slope, intercept = np.polyfit(x, y, 1)
+    r2 = float(np.corrcoef(x, y)[0, 1] ** 2)
+    return {"slope": float(slope), "intercept": float(intercept), "r2": r2, "n": len(pts),
+            "hr_top": float(x.max()), "hr_low": float(x.min())}
+
+
+def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None = None,
+                            laps: list[dict] | None = None) -> dict:
     session = session or {}
     if df.empty:
         return {}
@@ -155,7 +186,9 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
 
     rolling_speed = pd.Series(speed).rolling(60, min_periods=30).mean()[moving]
     avg_speed = distance_m / moving_s if moving_s else 0.0
-    segments = quality_segments(df, a.threshold_pace)
+    segments = quality_segments(df, a.threshold_pace, laps=laps)
+    for sg in segments:  # mean slope of each rep, to recognise hill repeats
+        sg["grade"] = float(np.mean(grade[sg["start_idx"]:sg["end_idx"] + 1])) if sg["end_idx"] >= sg["start_idx"] else 0.0
     return {
         "distance_m": distance_m,
         "moving_s": moving_s,
@@ -181,4 +214,5 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
         "best_efforts": best_efforts(t, dist, segments),
         "best_durations": best_durations(speed, segments),
         "quality_segments": segments,
+        "hr_speed": hr_speed_fit(hr, gap_speed, moving, segments) if has_hr else None,
     }

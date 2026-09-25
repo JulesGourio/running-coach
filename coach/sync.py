@@ -157,10 +157,10 @@ def analyze(s: Settings, db: DB, force: bool = False, log: Log = print) -> int:
         except Exception as e:  # noqa: BLE001
             log(f"Lecture impossible de {act['fit_path']} : {e}")
             continue
-        m = compute_session_metrics(fit.records, a, fit.session)
+        m = compute_session_metrics(fit.records, a, fit.session, fit.laps)
         day = plan.get(act["date"])
         course = next((c["json"] for c in (day or {}).get("courses", []) if c.get("json") and c["json"].get("sportType") in (1, 5)), None)
-        v = judge(m, a, course, fit.records, fit.laps)
+        v = judge(m, a, course, fit.records, fit.laps, act.get("sport_type"))
         db.save_analysis(act["label_id"], m, v)
         n += 1
     log(f"{n} séance{'s' if n > 1 else ''} analysée{'s' if n > 1 else ''}.")

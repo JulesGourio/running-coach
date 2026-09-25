@@ -17,6 +17,10 @@ from coach.metrics.zones import Athlete
 from coach.text import course_text
 from coach.verdict import fpace
 
+
+def _k(v_ms: float) -> str:
+    return f"{v_ms * 3.6:.1f}".replace(".", ",")
+
 REST = {"sportType": 4, "courseName": "Repos", "courseDescription": "Jour de repos complet.", "sections": []}
 JOG = (380, 450)
 STRIDES = (190, 210)
@@ -30,6 +34,7 @@ TEMPLATES = {
     "allure": "Allure 10 km (répétitions)",
     "longue": "Sortie longue",
     "longue_allure": "Sortie longue avec allure",
+    "test_vma": "Test VMA (6 minutes)",
     "repos": "Repos",
 }
 
@@ -123,6 +128,17 @@ def build(template: str, p: dict) -> dict:
         return {"sportType": 1, "courseName": f"Sortie longue {_km(m)}",
                 "courseDescription": f"Sortie longue en endurance fondamentale ({_p(easy)}).",
                 "sections": [section("work", "distance", m, easy)]}
+    if template == "test_vma":
+        guess = p.get("vma_guess", (205, 225))
+        return {"sportType": 1, "courseName": "Test VMA 6 minutes",
+                "courseDescription": "20 min d'échauffement et 4 accélérations, puis 6 minutes à fond le plus régulier "
+                                     "possible (sur piste si possible). Note la distance parcourue : VMA = distance / 100 "
+                                     "(ex. 1700 m = 17 km/h), à saisir dans la page Progression. 15 min de retour au calme.",
+                "sections": [section("warmup", "time", 1200, easy),
+                             group(4, section("work", "distance", 100, STRIDES), section("recovery", "time", 60, JOG)),
+                             section("recovery", "time", 120, JOG),
+                             section("work", "time", 360, guess),
+                             section("cooldown", "time", 900, (easy[0], easy[1] + 10))]}
     if template == "longue_allure":
         total, fast = p["km"] * 1000, p["fast_km"] * 1000
         if fast >= total:
@@ -233,6 +249,45 @@ def shift_paces(course: dict, delta_s: int, threshold_pace: float) -> dict:
                 s["intensityValueStart"] = min(1499, max(120, s["intensityValueStart"] + delta_s))
                 s["intensityValueEnd"] = min(1499, max(120, s["intensityValueEnd"] + delta_s))
     walk(c.get("sections") or [])
+    return c
+
+
+def _vma_sections(course: dict, threshold_pace: float, keep: tuple[float, float]):
+    """Plain work sections run at VMA intensity: faster than 95 % of threshold pace, not strides, and not at
+    goal pace (those follow the race goal, not the VMA)."""
+    def walk(secs):
+        for s in secs:
+            if s.get("intervalGroup"):
+                yield from walk(s.get("sets") or [])
+            elif (s.get("sectionType") == 2 and s.get("intensityType") == 2 and s.get("intensityValueEnd")
+                  and max(s["intensityValueStart"], s["intensityValueEnd"]) < threshold_pace * 0.95
+                  and not (s.get("targetType") == 1 and (s.get("targetValue") or 0) < 200)
+                  and not (min(s["intensityValueStart"], s["intensityValueEnd"]) <= keep[1]
+                           and max(s["intensityValueStart"], s["intensityValueEnd"]) >= keep[0])):
+                yield s
+    yield from walk(course.get("sections") or [])
+
+
+def implied_vma(courses: list[dict], threshold_pace: float, keep: tuple[float, float]) -> float | None:
+    """VMA (m/s) the plan's VMA sessions were written for: each rep's target pace scaled back by the usual
+    fraction of VMA for its duration; median over the plan."""
+    from coach.metrics.progress import rep_vma_fraction
+    ests = []
+    for c in courses:
+        for s in _vma_sections(c, threshold_pace, keep):
+            mid = (s["intensityValueStart"] + s["intensityValueEnd"]) / 2
+            dur = s["targetValue"] * mid / 1000 if s["targetType"] == 1 else s["targetValue"]
+            ests.append((1000 / mid) / rep_vma_fraction(dur))
+    return float(sorted(ests)[len(ests) // 2]) if ests else None
+
+
+def rescale_vma_paces(course: dict, ratio: float, threshold_pace: float, keep: tuple[float, float]) -> dict:
+    """VMA-intensity paces × ratio (old VMA / new VMA: < 1 means faster); threshold, goal pace and easy running
+    are left alone."""
+    c = copy.deepcopy(course)
+    for s in _vma_sections(c, threshold_pace, keep):
+        s["intensityValueStart"] = min(1499, max(120, int(round(s["intensityValueStart"] * ratio))))
+        s["intensityValueEnd"] = min(1499, max(120, int(round(s["intensityValueEnd"] * ratio))))
     return c
 
 
@@ -382,6 +437,40 @@ def suggestions(db: DB, s: Settings) -> list[dict]:
         out.append({"title": "Alléger les séances de qualité des 7 prochains jours (-20 %)",
                     "why": f"Ratio de charge COROS à {max(ratios):.2f} plusieurs jours de suite (excessif au-delà de 1,5).",
                     "changes": [make_change(d, [scale(c, 0.8) for c in day_courses(d)], "Charge excessive") for d in week_q]})
+
+    pr = service.progress(db, s)
+    vma = pr["vma"]
+    keep = ((s.goal_a or 2400) / 10 - 5, (s.goal_b or 2490) / 10 + 5)
+    vma_days = [d for d in qual if any(any(True for _ in _vma_sections(c, a.threshold_pace, keep)) for c in day_courses(d))]
+    sources = [v for v in (vma.get("fractionnes"), vma.get("cardio"), vma.get("seuil"), vma.get("vo2max")) if v]
+    if not vma.get("test") and len(sources) > 1 and (max(sources) - min(sources)) * 3.6 >= 1.0:
+        target = next((d for d in vma_days if d["date"] <= (today + timedelta(days=14)).isoformat()), None)
+        if target:
+            v = vma["retenue"] or max(sources)
+            test = build("test_vma", {"easy": default_paces(a, None)["easy"],
+                                      "vma_guess": (round(1000 / (v * 1.06)), round(1000 / (v * 0.97)))})
+            out.append({"title": f"Programmer un test VMA le {target['date']} (à la place de la séance VMA)",
+                        "why": f"Les estimations de ta VMA vont de {_k(min(sources))} à {_k(max(sources))} km/h selon "
+                               "la méthode. Un test de 6 minutes tranche, et toutes les allures (plan, prédictions) se recalent dessus.",
+                        "changes": [make_change(target, [test], "Test VMA")]})
+
+    future_all = [d for d in db.plan_days(today.isoformat()) if not day_is_done(d)]
+    implied = implied_vma([c for d in future_all for c in day_courses(d)], a.threshold_pace, keep)
+    if implied and vma.get("retenue") and abs(vma["retenue"] - implied) * 3.6 >= 0.3:
+        ratio = implied / vma["retenue"]
+        changes = []
+        for d in future_all:
+            cs = day_courses(d)
+            new = [rescale_vma_paces(c, ratio, a.threshold_pace, keep) for c in cs]
+            if new != cs:
+                changes.append(make_change(d, new, f"Allures VMA recalées sur {_k(vma['retenue'])} km/h"))
+        if changes:
+            faster = vma["retenue"] > implied
+            out.append({"title": f"Recaler les allures VMA du plan sur ta VMA retenue ({_k(vma['retenue'])} km/h)",
+                        "why": f"Les séances VMA du plan correspondent à {_k(implied)} km/h ; elles deviennent "
+                               f"{'plus rapides' if faster else 'plus lentes'} d'environ {abs(1 - ratio) * 100:.0f} %. "
+                               f"Le seuil et l'allure objectif ne bougent pas ({len(changes)} séances).",
+                        "changes": changes})
 
     view = {p["date"]: p for p in service.plan_view(db, s, back=4, ahead=0)}
     missed = [days[k] for k, p in sorted(view.items()) if p["status"] == "manquée" and k in days

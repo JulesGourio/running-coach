@@ -56,9 +56,13 @@ directement dans ton calendrier.
 ## Ce que l'appli calcule
 
 **Par séance**
-- **Type et note sur 10** : footing, sortie longue, seuil, VMA, allure spécifique, course, ou séance hors plan.
-- **Répétitions contre la cible** du plan. Elles sont retrouvées via les tours de la montre, ou détectées
-  dans les données. Pour chacune : écart en s/km, statut, régularité et baisse de régime.
+- **Type d'après ce qui a été couru**, avec la structure dans le titre (« VMA courte · 12 × 400 m ») :
+  récupération, footing, footing + accélérations, sortie longue, sortie longue avec allure, VMA courte,
+  VMA longue, allure spécifique, seuil, tempo, fartlek, côtes, course / effort à fond (+ trail, tapis, piste).
+- **Répétitions** : prises dans les tours de la montre quand ils les décrivent (séance structurée ou bouton tour,
+  mêmes valeurs que l'app COROS), sinon détectées dans le flux GPS et recadrées sur le cœur de l'effort.
+  Pour une séance prévue : écart à la cible en s/km, statut, régularité, baisse de régime, et une note de
+  **respect du plan** sur 10 (pas de note pour une séance hors plan).
 - **Discipline en endurance** : part du temps en zones faciles (objectif ≥ 90 %), allure comparée à la fourchette prévue.
 - **Découplage cardiaque** (Pa:HR) : perte d'efficacité entre la 1re et la 2de moitié. Au-delà de 5 %,
   l'endurance ne suit pas sur la durée.
@@ -76,12 +80,18 @@ directement dans ton calendrier.
 - **Ratio charge aiguë / chronique**, monotonie et contrainte (Foster).
 - **Répartition facile / tempo / intense** par semaine (repère : environ 80 % facile).
 - **Allure à FC fixe** sur les footings : l'indicateur le plus fiable de progrès aérobie.
-- **VMA estimée à partir des fractionnés** : les répétitions sont isolées de la récupération, puis chacune est
-  ramenée à la VMA selon sa durée (un 400 m se court vers 105 % de VMA, un 1000 m vers 98 %). On retient la
-  moyenne des deux meilleures séances des 6 dernières semaines ; les séances où la FC n'approche jamais le max
-  sont ignorées. Recoupée avec l'allure seuil COROS (seuil ≈ 87 % de VMA) et la VO2max COROS (≈ 3,5 × VMA).
-- **10 km estimé** : médiane de trois estimations (VMA des fractionnés, prédiction COROS, allure seuil COROS),
-  la VMA étant convertie en temps de course selon la part tenable sur la durée (~90 % sur 40 min).
+- **VMA retenue**, dans cet ordre :
+  1. un **test** récent (moins de 10 semaines) saisi dans la page Progression : 6 minutes, effort chronométré à
+     fond (1500 m, 3000 m…) ou valeur connue ;
+  2. sinon la **relation FC-vitesse** de la meilleure séance de fractionné des 6 dernières semaines : échauffement
+     et fin de chaque répétition (allure corrigée du dénivelé) s'alignent presque en ligne droite ; prolongée
+     jusqu'à 97 % de la FC max, elle donne la vitesse à VO2max même si les répétitions n'étaient pas à fond
+     (lignes nettes seulement, R² ≥ 0,85, séance ayant atteint 90 % de la FC max) ;
+  3. jamais en dessous des **allures courues** en fractionné (chaque répétition ramenée à la VMA selon sa durée :
+     400 m ≈ 105 %, 1000 m ≈ 98 % ; moyenne des deux meilleures séances).
+  Affichées en recoupement : allure seuil COROS (seuil ≈ 87 % de VMA) et VO2max COROS (≈ 3,5 × VMA, non retenue).
+- **10 km estimé** : médiane de trois estimations (VMA retenue, prédiction COROS, allure seuil COROS ; le test seul
+  s'il existe), la VMA étant convertie en temps de course selon la part tenable sur la durée (~90 % sur 40 min).
   Il n'y a ni course ni effort continu 5/10 km dans les données : Riegel, VDOT et vitesse critique sur les
   « meilleurs efforts » donnaient des résultats faux et ne sont plus utilisés.
 - **Projection au jour de la course** et probabilité d'atteindre les objectifs A et B : niveau actuel amélioré
@@ -92,6 +102,15 @@ directement dans ton calendrier.
 Les FC max et au seuil sont estimées depuis tes séances (seuil = meilleure FC moyenne sur 20 min).
 Pour plus de précision, renseigne `ATHLETE_HR_MAX`, `ATHLETE_LTHR` et `ATHLETE_THRESHOLD_PACE` dans `.env`.
 Après un changement de profil, les analyses sont recalculées automatiquement.
+
+## Séances types
+
+La page **Séances types** regroupe les séances de fractionné par catégorie (fractionné court, fractionné long,
+seuil, allure spécifique 10 km, pyramides et mixtes, côtes), avec allures calculées sur la VMA retenue, l'allure
+seuil et l'allure objectif. Chaque séance se personnalise (répétitions, distance ou durée, % de VMA ou écart
+d'allure, récupération trottée ou marchée, séries) et affiche le temps par répétition, le volume d'effort, la
+distance et la durée totales. Un clic l'ajoute à un jour du plan (mise en attente, envoi depuis la page Plan).
+Catalogue : `coach/workouts.py`.
 
 ## Plan modifiable
 
@@ -149,8 +168,9 @@ est exclu de git.
 
 - 10 km le dimanche 13 décembre 2026. Objectif A : sub-40:00. Objectif B : 41:00 à 41:30.
 - Forme au 25 septembre 2026 : VO2max 60, allure seuil 4:22/km, prédiction COROS 43:26,
-  VMA estimée sur les fractionnés 15,3 km/h, 10 km estimé 43:26, projection au 13 décembre 41:30
-  (fourchette 40:07-42:56).
+  VMA retenue 16,0 km/h (relation FC-vitesse du 6 × 1 km du 24/09, fourchette 15,5-16,7 ; allures de
+  fractionné 15,8 ; seuil COROS 15,8 ; VO2max COROS 17,1), 10 km estimé 42:05, projection au 13 décembre
+  40:14 (fourchette 37:56-42:33). Test VMA de 6 minutes proposé pour trancher.
 - Plan de 11 semaines dans le calendrier COROS (28 septembre → 13 décembre), réécrit le 25 septembre à la
   demande de Jules (le premier jugé trop facile ; il a déjà tenu cette charge pour un marathon) :
   5 séances par semaine dont 3 de qualité (VMA le mardi, seuil ou allure 10 km le jeudi, sortie longue avec

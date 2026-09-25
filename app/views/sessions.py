@@ -16,8 +16,7 @@ if not rows:
 
 
 def label(x):
-    score = f" · {fnum(x['score'])}/10" if x["score"] is not None else ""
-    return f"{fdate(x['date'])} · {x['name'] or x['type']}{score}"
+    return f"{fdate(x['date'])} · {x['headline'] or x['name'] or x['type']}"
 
 
 choice = st.selectbox("Séance", rows, format_func=label)
@@ -32,11 +31,11 @@ an = db.analysis(choice["label_id"])
 d = detail(choice["label_id"], an["computed_at"] if an else None)
 m, v = d.get("metrics") or {}, d.get("verdict") or {}
 
-st.header(choice["name"] or "Séance")
-score_txt = f" · **{fnum(v['score'])}/10**" if v.get("score") is not None else ""
-st.markdown(f"{type_badge(v.get('type_fr'))} {fdate(choice['date'])}{score_txt}")
+st.header(v.get("structure") or choice["name"] or "Séance")
+st.markdown(f"{type_badge(v.get('type_fr'))} {fdate(choice['date'])} · :gray[{choice['name'] or ''}]")
 if d.get("planned"):
-    st.caption("Prévu : " + " + ".join(f"{p['name']} ({p['summary']})" for p in d["planned"]))
+    plan_txt = " + ".join(f"{p['name']} ({p['summary']})" for p in d["planned"])
+    st.caption(f"Prévu : {plan_txt}" + (f" · respect du plan **{fnum(v['score'])}/10**" if v.get("score") is not None else ""))
 else:
     st.caption("Séance hors plan.")
 
@@ -93,9 +92,10 @@ if reps and reps.get("reps"):
 
 segments = v.get("segments")
 if segments:
-    st.subheader("Répétitions détectées")
-    st.caption("Séance hors plan : pas de cible à comparer, mais les répétitions rapides sont repérées "
-               "dans les données (isolées de la récupération entre elles).")
+    st.subheader("Répétitions")
+    st.caption("D'après les tours de ta montre (mêmes valeurs que l'app COROS)." if segments[0].get("source") == "tour"
+               else "Détectées dans les données GPS (pas de tours enregistrés) : isolées de la récupération, "
+                    "au cœur de chaque effort.")
     t = [{"#": sg["n"], "Distance (m)": round(sg["distance_m"]) if sg.get("distance_m") else None,
           "Durée": fdur(sg["duration_s"]), "Allure": f"{fpace(sg['pace'])}/km" if sg.get("pace") else "—",
           "FC moy.": round(sg["avg_hr"]) if sg.get("avg_hr") else None} for sg in segments]

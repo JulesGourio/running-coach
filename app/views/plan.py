@@ -43,7 +43,7 @@ if not plan:
     st.stop()
 
 pending: dict = st.session_state.setdefault("pending", {})
-vma = service.progress(db, s)["vma"].get("fractionnes")
+vma = service.progress(db, s)["vma"].get("retenue")
 P = pe.default_paces(a, vma, s.goal_a, s.goal_b)
 start, end = date.fromisoformat(plan["start"]), date.fromisoformat(plan["end"])
 n_weeks = plan.get("weeks") or (end - start).days // 7 + 1
@@ -115,6 +115,11 @@ def template_form(tpl: str, cur: list[dict]) -> dict:
     k = f"f-{tpl}"
     if tpl == "repos":
         return {}
+    if tpl == "test_vma":
+        v = vma or 1000 / a.threshold_pace / 0.87
+        st.caption("Échauffement 20 min, 4 accélérations, 6 minutes à fond, retour au calme. Saisis ensuite la distance "
+                   "dans la page Progression : elle remplacera toutes les estimations de VMA.")
+        return {"easy": P["easy"], "vma_guess": (round(1000 / (v * 1.06)), round(1000 / (v * 0.97)))}
     if tpl in ("footing", "footing_acc"):
         km = st.number_input("Distance (km)", 3.0, 30.0, float(km_now if 5 <= km_now <= 16 else 9), 0.5, key=f"{k}-km")
         p = {"km": km, "easy": pace_pair("Allure", P["easy"], k)}

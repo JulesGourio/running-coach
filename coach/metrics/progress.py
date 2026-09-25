@@ -158,8 +158,43 @@ def estimate_vma(sessions: list[tuple[date, list[dict]]], threshold_pace: float,
     return {"vma": float(np.mean([v for v, _ in top])), "sessions": [d.isoformat() for _, d in top]}
 
 
+HR_AT_VMA = 0.97  # fraction of max HR reached at VMA speed (the HR-speed line flattens near the top)
+
+
+def vma_from_hr_fits(fits: list[tuple[date, dict]], hr_max: float, end: date, window_days: int = 42) -> dict | None:
+    """VMA from the within-session heart rate / speed lines (session.hr_speed_fit): the line is extended to
+    97 % of max HR. Only clean lines (R² >= 0.85) from sessions that reached 90 % of max HR count, so the
+    extrapolation stays short; the best session wins, as for the pace-based estimate."""
+    ok = [(d, f) for d, f in fits if f and 0 <= (end - d).days < window_days
+          and f["r2"] >= 0.85 and f["hr_top"] >= 0.9 * hr_max]
+    if not ok:
+        return None
+    at = lambda f, frac: f["slope"] * frac * hr_max + f["intercept"]  # noqa: E731
+    d, f = max(ok, key=lambda df: at(df[1], HR_AT_VMA))
+    return {"vma": at(f, HR_AT_VMA), "vma_at_max": at(f, 1.0), "vma_at_95": at(f, 0.95), "date": d.isoformat(), "r2": f["r2"]}
+
+
+TEST_KINDS = {
+    "6min": "Test de 6 minutes (distance parcourue)",
+    "effort": "Effort chronométré à fond (distance et temps, ex. 1500 m, 3000 m, 5 km)",
+    "manuel": "VMA connue (mesurée ailleurs, en km/h)",
+}
+
+
+def vma_from_test(kind: str, distance_m: float | None = None, time_s: float | None = None, kmh: float | None = None) -> float:
+    """VMA in m/s from a field test: 6-minute test (distance / 360 s), a maximal timed effort (speed divided by
+    the fraction of VMA sustainable over that duration), or a known value."""
+    if kind == "6min":
+        return distance_m / 360
+    if kind == "effort":
+        return distance_m / time_s / race_vma_fraction(time_s)
+    if kind == "manuel":
+        return kmh / 3.6
+    raise ValueError(kind)
+
+
 def projection_from_current(current: float, series: list[tuple[date, float]], target_day: date, today: date,
-                            default_gain: float = 0.004, max_gain: float = 0.008) -> dict:
+                            default_gain: float = 0.004, max_gain: float = 0.008, spread: float = 0.0) -> dict:
     """Race-day projection from today's estimate. The weekly improvement rate comes from the recent trend
     when there is enough of it, clamped to [0, max_gain] (a training block doesn't make you slower, and
     >0.8 %/week over months isn't realistic); otherwise a typical 0.4 %/week. The range spans ±0.3 %/week."""
@@ -175,8 +210,10 @@ def projection_from_current(current: float, series: list[tuple[date, float]], ta
             gain, basis = min(max_gain, max(0.0, -coef[0] * 7 / y[-1])), "tendance"
     weeks = max(0.0, (target_day - today).days / 7)
     at = lambda g: current * (1 - g) ** weeks  # noqa: E731
-    return {"current": current, "projected": at(gain), "low": at(min(max_gain + 0.002, gain + 0.003)),
-            "high": at(max(0.0, gain - 0.003)), "gain_per_week": gain, "basis": basis, "weeks": weeks}
+    # `spread`: half the disagreement between today's estimates, so the range also carries that uncertainty.
+    return {"current": current, "projected": at(gain), "low": at(min(max_gain + 0.002, gain + 0.003)) - spread,
+            "high": at(max(0.0, gain - 0.003)) + spread, "gain_per_week": gain, "basis": basis, "weeks": weeks,
+            "spread": spread}
 
 
 def prob_under(target: float, proj: dict) -> float:

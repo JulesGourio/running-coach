@@ -39,6 +39,10 @@ Package Python `coach/` (voir README). En local, le serveur MCP `running-coach` 
 expose les analyses calculées à partir des fichiers FIT : `resume`, `seances`, `analyse_seance`,
 `progression`, `charge`, `plan`, `modifications_plan`, `enregistrer_verdict`, `synchroniser`.
 
+Le type de chaque séance vient de ce qui a été couru (tours de la montre sinon flux GPS), pas du plan ;
+la note sur 10 n'existe que pour une séance prévue (respect du plan). VMA : un test saisi prime, sinon la
+relation FC-vitesse, jamais sous les allures courues (voir README).
+
 Pour juger une séance :
 1. Lis `analyse_seance` (métriques, répétitions contre la cible, constats automatiques, note sur 10).
 2. Rédige un verdict court et précis en français : ce qui est réussi, ce qui ne l'est pas, avec les chiffres
