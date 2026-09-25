@@ -93,6 +93,10 @@ class DB:
         self.path = str(path)
         with self.conn() as c:
             c.executescript(SCHEMA)
+            have = {r["name"] for r in c.execute("PRAGMA table_info(activities)")}
+            for col in ("calories REAL", "avg_speed_kmh REAL"):
+                if col.split()[0] not in have:
+                    c.execute(f"ALTER TABLE activities ADD COLUMN {col}")
 
     @contextmanager
     def conn(self) -> Iterator[sqlite3.Connection]:
@@ -107,7 +111,7 @@ class DB:
     # ---- activities ----
     def upsert_activity(self, a: dict[str, Any]) -> None:
         cols = ["label_id", "sport_type", "date", "start_ts", "name", "type", "distance_km", "duration_s",
-                "avg_pace", "avg_hr", "source"]
+                "avg_pace", "avg_hr", "source", "calories", "avg_speed_kmh"]
         vals = [a.get(k) for k in cols]
         with self.conn() as c:
             c.execute(
@@ -121,8 +125,13 @@ class DB:
         with self.conn() as c:
             c.execute("UPDATE activities SET fit_path=? WHERE label_id=?", (path, label_id))
 
-    def activities(self, since: str | None = None, until: str | None = None) -> list[dict]:
+    def activities(self, since: str | None = None, until: str | None = None, sports: str = "run") -> list[dict]:
+        """Running only by default (every analysis is about running); sports="all" adds hiking, cycling, etc."""
         q, args = "SELECT * FROM activities WHERE 1=1", []
+        if sports == "run":
+            q += " AND (sport_type IN (100, 101, 102, 103) OR sport_type IS NULL)"
+        elif sports == "other":
+            q += " AND sport_type NOT IN (100, 101, 102, 103)"
         if since:
             q += " AND date>=?"
             args.append(since)

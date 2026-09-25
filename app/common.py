@@ -167,22 +167,24 @@ def zone_table(a: Athlete):
                                        if c == "Zone" else "" for c in row.index], axis=1)
 
 
-def sidebar() -> None:
+def sync_bar() -> None:
+    """Compact sync control above every page (no sidebar: the page gets the full width)."""
     s, db = ctx()
-    with st.sidebar:
-        st.caption(f"Données : `{s.data_dir}`")
-        if st.button("Synchroniser COROS", icon=":material/sync:", width="stretch"):
-            from coach.sources.coros_mcp import NeedsLogin, describe
-            from coach.sync import analyze, sync_mcp
-            logs: list[str] = []
-            with st.spinner("Récupération des données COROS…"):
-                try:
-                    asyncio.run(sync_mcp(s, db, days=21, interactive=False, log=logs.append))
-                    analyze(s, db, log=logs.append)
-                    st.cache_data.clear()
-                    st.success("\n\n".join(logs) or "Synchronisé.")
-                except NeedsLogin as e:
-                    st.warning(f"{e}\n\nLance la commande dans le terminal de VS Code, puis réessaie.")
-                except Exception as e:  # noqa: BLE001
-                    st.error(f"Synchronisation impossible : {describe(e)}")
-        st.caption("Première connexion : `uv run coach login` dans le terminal.")
+    last = db.get_meta("last_sync")
+    c1, c2 = st.columns([8, 1.4], vertical_alignment="center")
+    c1.caption(f"Dernière synchro COROS : {last[:16].replace('T', ' à ')}" if last else "Pas encore synchronisé.")
+    if c2.button("Synchroniser", icon=":material/sync:", width="stretch", key="sync-top",
+                 help="Récupère séances, sommeil, récupération et plan des 3 dernières semaines depuis COROS."):
+        from coach.sources.coros_mcp import NeedsLogin, describe
+        from coach.sync import analyze, sync_mcp
+        logs: list[str] = []
+        with st.spinner("Récupération des données COROS…"):
+            try:
+                asyncio.run(sync_mcp(s, db, days=21, interactive=False, log=logs.append))
+                analyze(s, db, log=logs.append)
+                st.cache_data.clear()
+                st.toast(" · ".join(logs) or "Synchronisé.", icon=":material/check_circle:")
+            except NeedsLogin as e:
+                st.warning(f"{e} — lance `uv run coach login` dans le terminal, puis réessaie.")
+            except Exception as e:  # noqa: BLE001
+                st.error(f"Synchronisation impossible : {describe(e)}")

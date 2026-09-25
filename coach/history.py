@@ -11,12 +11,17 @@ from coach.db import DB
 DISTANCES = [("5 km", 4.9, 5.4), ("10 km", 9.8, 10.7), ("Semi-marathon", 20.9, 21.8), ("Marathon", 41.8, 43.0)]
 
 
-def frame(db: DB) -> pd.DataFrame:
+RUN_TYPES = {"Course", "Trail", "Tapis", "Piste"}
+
+
+def frame(db: DB, sports: str = "run") -> pd.DataFrame:
     an = db.analyses()
     rows = []
-    for a in db.activities():
+    for a in db.activities(sports=sports):
         v = (an.get(a["label_id"]) or {}).get("verdict") or {}
-        rows.append({**a, "category": v.get("type_fr") or ("Trail" if a.get("type") == "Trail" else "Non analysée"),
+        run = a.get("type") in RUN_TYPES or a.get("sport_type") in (100, 101, 102, 103, None)
+        rows.append({**a, "category": v.get("type_fr") or (("Trail" if a.get("type") == "Trail" else "Non analysée") if run else a.get("type")),
+                     "sport": "Course à pied" if run else a.get("type"),
                      "structure": v.get("structure"), "headline": v.get("headline")})
     df = pd.DataFrame(rows)
     if df.empty:

@@ -1,8 +1,9 @@
 import streamlit as st
 
-from common import sidebar
+from common import sync_bar
 
-st.set_page_config(page_title="Carnet de course", page_icon=":material/directions_run:", layout="wide")
+st.set_page_config(page_title="Carnet de course", page_icon=":material/directions_run:", layout="wide",
+                   initial_sidebar_state="collapsed")
 
 pages = st.navigation([
     st.Page("views/today.py", title="Aujourd'hui", icon=":material/today:", default=True),
@@ -13,6 +14,6 @@ pages = st.navigation([
     st.Page("views/recovery.py", title="Récupération", icon=":material/bedtime:"),
     st.Page("views/plan.py", title="Plan", icon=":material/calendar_month:"),
     st.Page("views/library.py", title="Séances types", icon=":material/fitness_center:"),
-])
-sidebar()
+], position="top")
+sync_bar()
 pages.run()

@@ -13,7 +13,8 @@ s, db = ctx()
 today = date.today()
 st.title("Historique")
 
-df = hist.frame(db)
+sport = st.segmented_control("Sport", ["Course à pied", "Tous les sports"], default="Course à pied", key="h-sport") or "Course à pied"
+df = hist.frame(db, "run" if sport == "Course à pied" else "all")
 if df.empty:
     st.info("Aucune séance : lance `uv run coach history --days 3650`.")
     st.stop()
@@ -70,8 +71,23 @@ style(fig, 320).update_layout(barmode="stack", title=f"Kilomètres par {'semaine
 st.plotly_chart(fig, width="stretch")
 st.caption("« Non analysée » : séance sans fichier FIT détaillé pour l'instant (ils arrivent au fil des synchronisations).")
 
+if sport == "Tous les sports" and len(w):
+    hrs = w.assign(period=w["date"].dt.to_period(freq).dt.start_time).pivot_table(
+        index="period", columns="sport", values="hours", aggfunc="sum", fill_value=0)
+    palette = ["#2e6fdb", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#84cc16", "#ec4899", "#64748b"]
+    fig = go.Figure()
+    for i, col in enumerate(sorted(hrs.columns, key=lambda c: (c != "Course à pied", c))):
+        fig.add_bar(x=hrs.index, y=hrs[col], name=col, marker_color=palette[i % len(palette)],
+                    hovertemplate="%{y:.1f} h<extra>" + col + "</extra>")
+    style(fig, 300).update_layout(barmode="stack", title=f"Heures par {'semaine' if freq == 'W' else 'mois'}, par sport", hovermode="x unified")
+    st.plotly_chart(fig, width="stretch")
+    by_sport = w.groupby("sport").agg(n=("label_id", "count"), h=("hours", "sum"), km=("distance_km", "sum"), kcal=("calories", "sum"))
+    st.dataframe(pd.DataFrame({"Sport": by_sport.index, "Séances": by_sport["n"].values, "Heures": by_sport["h"].round(1).values,
+                               "Km": by_sport["km"].round(0).values, "Calories": by_sport["kcal"].round(0).values}),
+                 hide_index=True, width="stretch")
+
 # ---- pace & distance per run over the period -----------------------------------------------------------
-if len(w):
+if len(w) and sport == "Course à pied":
     fig = go.Figure(go.Scatter(x=w["date"], y=w["avg_pace"], mode="markers", marker=dict(size=(w["distance_km"].clip(3, 45) * 0.6 + 4),
                     color=[type_color(c) if c not in ("Non analysée", "Trail") else "#94a3b8" for c in w["category"]], opacity=0.8),
                     customdata=list(zip(w["distance_km"].round(1), w["avg_pace"].map(fpace), w["category"])),

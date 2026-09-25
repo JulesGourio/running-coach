@@ -31,7 +31,7 @@ async def sync_mcp(s: Settings, db: DB, days: int = 30, max_fit: int = 15, inter
     start = today - timedelta(days=days)
     stats = {"activities": 0, "fit": 0, "fit_errors": 0}
     async with CorosMCP(s, interactive=interactive) as c:
-        for a in await c.sport_records(ymd(start), ymd(today)):
+        for a in await c.sport_records(ymd(start), ymd(today), all_sports=True):
             db.upsert_activity({**a, "source": "coros"})
             stats["activities"] += 1
         stats["fit"], stats["fit_errors"] = await _download_missing(db, s, max_fit, c.download_fit, log)
@@ -50,6 +50,8 @@ async def sync_mcp(s: Settings, db: DB, days: int = 30, max_fit: int = 15, inter
 
         await fetch_sleep(c, db, today - timedelta(days=max(days, 14)), today)
         await refresh_plan(c, db)
+    from coach.db import now_iso
+    db.set_meta("last_sync", now_iso())
     log(f"COROS : {stats['activities']} séances, {stats['fit']} fichiers FIT téléchargés.")
     return stats
 
@@ -75,8 +77,8 @@ async def sync_history(s: Settings, db: DB, days: int = 365, log: Log = print) -
     async with CorosMCP(s) as c:
         a = start
         while a <= today:
-            b = min(a + timedelta(days=89), today)
-            for r in await c.sport_records(ymd(a), ymd(b)):
+            b = min(a + timedelta(days=59), today)  # 60-day windows: COROS returns at most 200 records per call
+            for r in await c.sport_records(ymd(a), ymd(b), all_sports=True):
                 db.upsert_activity({**r, "source": "coros"})
                 n_act += 1
             a = b + timedelta(days=1)

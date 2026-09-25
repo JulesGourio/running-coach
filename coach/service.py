@@ -84,10 +84,25 @@ def session_detail(db: DB, label_id: str, with_records: bool = False) -> dict | 
     return out
 
 
+def summary_load(act: dict, a: Athlete) -> float:
+    """Load of an activity known only by its summary (other sports, or a run without FIT file): 100 per hour at
+    threshold heart rate, scaled by the square of the heart-rate reserve fraction (the hrTSS idea); 30 per hour
+    without heart rate."""
+    hours = (act.get("duration_s") or 0) / 3600
+    if act.get("avg_hr") and a.lt_hr > a.hr_rest:
+        f = min(1.1, max(0.3, (act["avg_hr"] - a.hr_rest) / (a.lt_hr - a.hr_rest)))
+        return hours * 100 * f * f
+    return hours * 30
+
+
 def load_model(db: DB) -> dict:
+    from coach.config import get_settings
     an = db.analyses()
     acts = db.activities()
-    items = [(a["date"], an[a["label_id"]]["metrics"].get("load") or 0) for a in acts if a["label_id"] in an]
+    a = athlete(db, get_settings())
+    items = [(x["date"], an[x["label_id"]]["metrics"].get("load") or 0) if x["label_id"] in an else (x["date"], summary_load(x, a))
+             for x in acts]
+    items += [(x["date"], summary_load(x, a)) for x in db.activities(sports="other")]
     series = loadm.daily_load(items, end=date.today().isoformat())
     model = loadm.fitness_model(series)
     rows = [{"date": a["date"], "distance_m": an[a["label_id"]]["metrics"].get("distance_m") or 0,

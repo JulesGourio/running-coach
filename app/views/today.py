@@ -109,8 +109,8 @@ with st.container(horizontal=True):
               if acwr is not None and acwr == acwr else None,
               delta_color="normal" if acwr is not None and acwr == acwr and 0.8 <= acwr <= 1.3 else "inverse",
               help="Charge des 7 derniers jours / moyenne sur 28 jours. Zone optimale 0,8-1,3 ; au-dessus de 1,5 plusieurs jours : on allège.")
-st.caption("Forme, fatigue et fraîcheur sont calculées sur la course à pied seulement (intensité × durée). Le ratio de charge "
-           "vient de COROS, qui compte tous tes sports, randonnée comprise : c'est lui qui sert de garde-fou.")
+st.caption("Forme, fatigue et fraîcheur comptent tous tes sports : la course (détaillée) et les autres activités "
+           "(randonnée, vélo…, estimées d'après la FC et la durée). Le ratio de charge vient de COROS : c'est le garde-fou.")
 
 # ---- Alerts ----------------------------------------------------------------------------------------
 recent = service.sessions(db, 14)

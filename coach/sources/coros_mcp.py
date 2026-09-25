@@ -197,9 +197,9 @@ class CorosMCP:
         return text
 
     # ---- typed helpers ----
-    async def sport_records(self, start: str, end: str, limit: int = 200) -> list[dict]:
+    async def sport_records(self, start: str, end: str, limit: int = 200, all_sports: bool = False) -> list[dict]:
         t = await self.call("querySportRecords", {
-            "startDate": start, "endDate": end, "sportTypeCodes": [100, 101, 102, 103], "minDistanceKm": 0,
+            "startDate": start, "endDate": end, "sportTypeCodes": [65535] if all_sports else [100, 101, 102, 103], "minDistanceKm": 0,
             "maxDistanceKm": 1000, "minDurationMinutes": 0, "maxDurationMinutes": 6000, "maxAveragePace": "",
             "locationKeyword": "", "limit": limit})
         return parsers.parse_sport_records(t)

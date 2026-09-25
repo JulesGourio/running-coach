@@ -53,6 +53,13 @@ def parse_load(t: str) -> list[dict]:
 
 
 RUN_TYPES = {"Outdoor Run": "Course", "Trail Run": "Trail", "Indoor Run": "Tapis", "Track Run": "Piste"}
+SPORT_FR = {**RUN_TYPES, "Hike": "Randonnée", "Walk": "Marche", "Mountain Climb": "Alpinisme", "Cycling": "Vélo",
+            "Indoor Cycling": "Home trainer", "Mountain Bike": "VTT", "Gravel Bike": "Gravel", "E-Bike": "Vélo électrique",
+            "Pool Swim": "Natation", "Open Water": "Eau libre", "Flatwater": "Kayak / paddle", "Rowing": "Aviron",
+            "Badminton": "Badminton", "Tennis": "Tennis", "Padel": "Padel", "Gym Cardio": "Cardio en salle",
+            "Strength": "Renforcement", "Ski": "Ski", "Snowboard": "Snowboard", "XC Ski": "Ski de fond",
+            "Yoga": "Yoga", "Jump Rope": "Corde à sauter", "Elliptical": "Elliptique",
+            "Indoor Row": "Rameur", "Open Water Swim": "Eau libre"}
 
 
 def parse_sport_records(t: str) -> list[dict]:
@@ -73,12 +80,14 @@ def parse_sport_records(t: str) -> list[dict]:
             "sport_type": int(sport) if sport else None,
             "date": h.group(2),
             "start_ts": int(start) if start else None,
-            "type": RUN_TYPES.get(h.group(1).strip(), h.group(1).strip()),
+            "type": SPORT_FR.get(h.group(1).strip(), h.group(1).strip()),
             "name": _g(r"Location:\s*(.+)", b),
             "distance_km": float(dist) if dist else None,
             "duration_s": clock(_g(r"Duration:\s*([\d:]+)", b)),
             "avg_pace": clock(_g(r"Average Pace:\s*([\d:]+)", b)),
             "avg_hr": float(hr) if hr else None,
+            "calories": float(v) if (v := _g(r"Calories:\s*(\d+)", b)) else None,
+            "avg_speed_kmh": float(v) if (v := _g(r"Average Speed:\s*([\d.]+)\s*km/h", b)) else None,
         })
     return sorted(out, key=lambda x: (x["date"], x["start_ts"] or 0), reverse=True)
 
