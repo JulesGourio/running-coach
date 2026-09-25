@@ -127,3 +127,49 @@ if recs:
                  hide_index=True, width="stretch")
     st.caption(f"Calculés sur les {n_fit} sorties dont le fichier FIT détaillé est déjà téléchargé (sur {n_runs}) ; le reste arrive "
                "au fil des synchronisations. Trail exclu (les descentes fausseraient les records).")
+
+# ---- map of every route --------------------------------------------------------------------------------
+st.subheader("Carte de tes sorties", divider="gray")
+ans = db.analyses()
+tracks = []
+for _, r_ in w.iterrows():
+    tr = ((ans.get(r_["label_id"]) or {}).get("metrics") or {}).get("track") or []
+    if len(tr) > 5:
+        tracks.append((r_, tr))
+if not tracks:
+    st.caption("Pas de tracé GPS sur la période.")
+else:
+    import math
+    tab_routes, tab_heat = st.tabs([":material/route: Parcours", ":material/local_fire_department: Carte de chaleur"])
+    lats = [p_[0] for _, tr in tracks for p_ in tr]
+    lons = [p_[1] for _, tr in tracks for p_ in tr]
+    # centre on where most runs start (a single trip far away shouldn't zoom the map out to half of Europe)
+    starts = pd.DataFrame([(tr[0][0], tr[0][1]) for _, tr in tracks], columns=["lat", "lon"])
+    c_lat, c_lon = starts["lat"].median(), starts["lon"].median()
+    near = [(la, lo) for la, lo in zip(lats, lons) if abs(la - c_lat) < 0.3 and abs(lo - c_lon) < 0.4]
+    span = max(max(p_[0] for p_ in near) - min(p_[0] for p_ in near), (max(p_[1] for p_ in near) - min(p_[1] for p_ in near)) * 0.7, 0.01) if near else 0.2
+    zoom = max(3, min(15, math.log2(360 / span) - 1.3))
+    palette = {"Course à pied": "#dc2626", "Randonnée": "#16a34a", "Vélo": "#2563eb", "VTT": "#7c3aed"}
+    with tab_routes:
+        fig = go.Figure()
+        for sport_ in sorted({r_["sport"] for r_, _ in tracks}, key=lambda x: x != "Course à pied"):
+            la, lo, tx = [], [], []
+            for r_, tr in tracks:
+                if r_["sport"] != sport_:
+                    continue
+                la += [p_[0] for p_ in tr] + [None]
+                lo += [p_[1] for p_ in tr] + [None]
+                label = f"{fdate(r_['date'].date())} · {r_.get('headline') or r_['name']}"
+                tx += [label] * len(tr) + [None]
+            fig.add_trace(go.Scattermap(lat=la, lon=lo, mode="lines", name=sport_, line=dict(width=2.5, color=palette.get(sport_, "#64748b")),
+                                        opacity=0.55, hovertext=tx, hoverinfo="text"))
+        fig.update_layout(map=dict(style="open-street-map", center=dict(lat=c_lat, lon=c_lon), zoom=zoom), height=560,
+                          margin=dict(l=0, r=0, t=0, b=0), legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)"))
+        st.plotly_chart(fig, width="stretch")
+        st.caption(f"{len(tracks)} tracés sur la période. Zoome ou déplace la carte pour voir les sorties ailleurs.")
+    with tab_heat:
+        fig = go.Figure(go.Densitymap(lat=lats, lon=lons, radius=6, colorscale="YlOrRd", showscale=False, opacity=0.8))
+        fig.update_layout(map=dict(style="open-street-map", center=dict(lat=c_lat, lon=c_lon), zoom=zoom), height=560,
+                          margin=dict(l=0, r=0, t=0, b=0))
+        st.plotly_chart(fig, width="stretch")
+        st.caption("Plus c'est rouge, plus tu passes souvent par là.")

@@ -123,14 +123,18 @@ if rec0 is not None and len(rec0) and rec0["lat"].notna().sum() > 10:
         col_vals = (1000 / spd_s.where(spd_s > 1.2)).clip(lower=150, upper=600)
         hover = [f"{d_ / 1000:.2f} km · {fpace(p_)}/km" if p_ == p_ else f"{d_ / 1000:.2f} km"
                  for d_, p_ in zip(g["distance"].fillna(0), col_vals)]
-        fig = route_map(g["lat"], g["lon"], col_vals.fillna(col_vals.median()), "allure (s/km)", hover)
+        fig = route_map(g["lat"], g["lon"], col_vals.fillna(col_vals.median()), "allure", hover)
+        lo_, hi_ = col_vals.quantile(0.05), col_vals.quantile(0.95)
+        ticks = list(range(int(lo_ // 15 * 15), int(hi_) + 15, 15 if hi_ - lo_ < 90 else 30))
+        fig.update_traces(selector=dict(mode="markers"), marker=dict(cmin=lo_, cmax=hi_, colorbar=dict(
+            title="allure", tickvals=ticks, ticktext=[fpace(v_) for v_ in ticks])))
     else:
         col_vals = (spd_s * 3.6).fillna(0)
         hover = [f"{d_ / 1000:.2f} km · {v_:.1f} km/h" for d_, v_ in zip(g["distance"].fillna(0), col_vals)]
         fig = route_map(g["lat"], g["lon"], col_vals, "km/h", hover, reverse=True)
     mc1, mc2 = st.columns([3, 2])
     mc1.plotly_chart(fig, width="stretch")
-    mc1.caption("Couleur : " + ("allure (bleu = rapide, rouge = lent)." if is_run else "vitesse (bleu = rapide)."))
+    mc1.caption("Couleur : " + ("allure (rouge = rapide, bleu = lent)." if is_run else "vitesse (bleu = rapide)."))
     alt = g.dropna(subset=["altitude"])
     if len(alt) > 10:
         mc2.plotly_chart(elevation_fig(alt["distance"] / 1000, alt["altitude"], height=300), width="stretch")
