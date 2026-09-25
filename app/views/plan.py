@@ -9,7 +9,9 @@ from coach import plan_edit as pe
 from coach import service
 from coach.text import course_text
 from coach.verdict import TYPE_FR, classify
-from common import ctx, fdate, fnum, fpace, type_badge
+import plotly.graph_objects as go
+
+from common import BLUE, MUTED, ORANGE, ctx, fdate, fdur, fnum, fpace, style, tint, type_badge
 
 s, db = ctx()
 a = service.athlete(db, s)
@@ -279,51 +281,113 @@ for i, sg in enumerate(sugg):
             queue(sg["changes"])
             st.rerun()
 
-# ---- week view --------------------------------------------------------------------------------------
-week = st.segmented_control("Semaine", list(range(n_weeks)), default=cur_week, key="week",
-                            format_func=lambda i: f"S{i + 1}" + (" ●" if i == cur_week else ""))
-week = cur_week if week is None else week
+# ---- volume, week by week: before the plan and during it -------------------------------------------------
+BEFORE = st.session_state.get("weeks-before", 8)
+weeks = list(range(-BEFORE, n_weeks))
+w_label = lambda i: f"S{i + 1}" if i >= 0 else f"{i}"  # noqa: E731
+cur_week = min(max((today - start).days // 7, -BEFORE), n_weeks - 1)
+hist_acts = service.sessions_between(db, (start - timedelta(weeks=BEFORE)).isoformat(), end.isoformat())
+done_w, plan_w = {}, {}
+for x in hist_acts:
+    i = (date.fromisoformat(x["date"]) - start).days // 7
+    done_w[i] = done_w.get(i, 0) + (x.get("distance_km") or 0)
+for k_, dy in stored.items():
+    i = (date.fromisoformat(k_) - start).days // 7
+    plan_w[i] = plan_w.get(i, 0) + sum(pe.course_km(c) for c in effective(dy))
+fig = go.Figure()
+fig.add_bar(x=[w_label(i) for i in weeks], y=[done_w.get(i, 0) for i in weeks], name="Réalisé",
+            marker_color=[BLUE if i < cur_week else ORANGE if i == cur_week else tint(BLUE, 0.3) for i in weeks],
+            hovertemplate="%{x} : %{y:.1f} km réalisés<extra></extra>")
+fig.add_scatter(x=[w_label(i) for i in weeks if i >= 0], y=[plan_w.get(i, 0) for i in weeks if i >= 0], name="Prévu",
+                mode="lines+markers", line=dict(color=MUTED, dash="dot", width=2), marker=dict(size=7),
+                hovertemplate="%{x} : %{y:.0f} km prévus<extra></extra>")
+style(fig, 260).update_layout(title="Volume par semaine : réalisé et prévu (km) — semaines négatives : avant le plan",
+                              hovermode="x unified", bargap=0.25)
+fig.update_xaxes(tickangle=0)
+st.plotly_chart(fig, width="stretch")
+
+c1, c2 = st.columns([4, 1], vertical_alignment="bottom")
+week = c1.select_slider("Semaine", options=weeks, value=cur_week, key="week",
+                        format_func=lambda i: (w_label(i) if i >= 0 else f"{abs(i)} sem. avant") + (" (en cours)" if i == cur_week else ""))
+c2.number_input("Semaines avant le plan", 0, 52, BEFORE, 4, key="weeks-before")
 ws = start + timedelta(weeks=week)
 we = ws + timedelta(days=6)
-view = {p["date"]: p for p in service.plan_view(db, s, back=(today - ws).days, ahead=(we - today).days)}
 dates = [ws + timedelta(days=i) for i in range(7)]
 eff = {d.isoformat(): effective(stored[d.isoformat()]) if d.isoformat() in stored else [] for d in dates}
+done_by_day: dict[str, list] = {}
+for x in service.sessions_between(db, ws.isoformat(), we.isoformat()):
+    done_by_day.setdefault(x["date"], []).append(x)
 planned_km = sum(pe.course_km(c) for cs in eff.values() for c in cs)
-done_km = sum(x.get("distance_km") or 0 for p in view.values() for x in p["done"])
+done_km = sum(x.get("distance_km") or 0 for xs in done_by_day.values() for x in xs)
+n_planned = sum(1 for cs in eff.values() if cs)
+n_done = sum(1 for k_, cs in eff.items() if cs and done_by_day.get(k_))
 n_quality = sum(1 for cs in eff.values() if any(pe.is_quality_course(c, a.threshold_pace) for c in cs))
 
-st.markdown(f"### Semaine {week + 1} · {phase_of(ws)}  \n:gray[{fdate(ws)} → {fdate(we)}]")
+title = f"Semaine {week + 1} · {phase_of(ws)}" if week >= 0 else f"{abs(week)} semaine{'s' if week < -1 else ''} avant le plan"
+st.markdown(f"### {title}  \n:gray[{fdate(ws)} → {fdate(we)}]")
 with st.container(horizontal=True):
-    st.metric("Volume prévu", f"{fnum(planned_km, 0)} km", border=True)
-    st.metric("Réalisé", f"{fnum(done_km, 1)} km", border=True)
-    st.metric("Séances de qualité", n_quality, border=True)
+    if week >= 0:
+        st.metric("Volume prévu", f"{fnum(planned_km, 0)} km", border=True)
+    st.metric("Réalisé", f"{fnum(done_km, 1)} km", border=True,
+              delta=f"{done_km - planned_km:+.1f} km".replace(".", ",") if week >= 0 and ws <= today else None,
+              delta_color="off")
+    if week >= 0:
+        st.metric("Séances faites", f"{n_done}/{n_planned}" if ws <= today else f"0/{n_planned}", border=True)
+        st.metric("Séances de qualité prévues", n_quality, border=True)
+    else:
+        st.metric("Séances", sum(len(v) for v in done_by_day.values()), border=True)
 
+st.markdown(":gray[**Jour** · **Prévu** · **Réalisé**]")
 for d in dates:
     k_ = d.isoformat()
-    day, p = stored.get(k_), view.get(k_, {})
+    day, done = stored.get(k_), done_by_day.get(k_, [])
     courses = eff.get(k_, [])
     with st.container(border=True):
-        c1, c2, c3, c4 = st.columns([1.3, 5, 2.2, 1.4], vertical_alignment="center")
+        c1, c2, c3, c4 = st.columns([1.1, 4, 4, 1.3], vertical_alignment="center")
         c1.markdown(f"**{'Aujourd’hui' if d == today else fdate(d).split()[0].capitalize()}**  \n:gray[{d.day} {fdate(d).split()[2]}]")
+        # planned
         if not day:
-            c2.caption("Non synchronisé")
-            continue
-        label = kind_label(courses)
-        tag = " :orange-badge[en attente]" if k_ in pending else ""
-        if courses:
-            c2.markdown(f"{type_badge(label)}{tag}  \n" + "  \n".join(f"**{c['courseName']}** · {course_text(c)}" for c in courses))
+            c2.caption("Avant le plan" if d < start else "Non synchronisé")
         else:
-            c2.markdown(f"{type_badge('Repos')}{tag}")
-        if k_ in pending:
-            c2.caption(f"~~{pe.describe(pending[k_]['before'])}~~")
-        status = p.get("status", "")
-        icon = {"faite": ":green[:material/check_circle: faite]", "manquée": ":red[:material/cancel: manquée]",
-                "à venir": ":gray[à venir]", "repos": ""}.get(status, "")
-        km = sum(pe.course_km(c) for c in courses)
-        c3.markdown((f"≈ {fnum(km, 1)} km  \n" if km else "") + icon)
-        for x in p.get("done", []):
-            c3.caption(f"{x['name'] or ''} · {fnum(x['distance_km'], 1)} km" + (f" · {fnum(x['score'])}/10" if x.get("score") is not None else ""))
-        if editable(day):
+            tag = " :orange-badge[en attente]" if k_ in pending else ""
+            if courses:
+                km = sum(pe.course_km(c) for c in courses)
+                c2.markdown(f"{type_badge(kind_label(courses))}{tag} :gray[≈ {fnum(km, 1)} km]  \n"
+                            + "  \n".join(f"**{c['courseName']}** · :gray[{course_text(c)}]" for c in courses))
+            else:
+                c2.markdown(f"{type_badge('Repos')}{tag}")
+            if k_ in pending:
+                c2.caption(f"~~{pe.describe(pending[k_]['before'])}~~")
+        # done
+        if done:
+            for x in done:
+                bits = [f"{fnum(x['distance_km'], 1)} km"]
+                if x.get("duration_s"):
+                    bits.append(fdur(x["duration_s"]))
+                if x.get("avg_pace"):
+                    bits.append(f"{fpace(x['avg_pace'])}/km")
+                if x.get("avg_hr"):
+                    bits.append(f"FC {x['avg_hr']:.0f}")
+                c3.markdown(f"{type_badge(x.get('kind_fr'))} {x.get('structure') or ''}  \n:gray[{' · '.join(bits)}]")
+                cmp = []
+                p_km = sum(pe.course_km(c) for c in courses)
+                if p_km and x.get("distance_km"):
+                    diff = x["distance_km"] - p_km
+                    if abs(diff) >= 0.5:
+                        cmp.append(f":{'orange' if abs(diff) / p_km > 0.15 else 'gray'}[{diff:+.1f} km vs prévu]".replace(".", ","))
+                if x.get("score") is not None:
+                    cmp.append(f"respect du plan **{fnum(x['score'])}/10**")
+                if x.get("findings"):
+                    cmp.append(f":gray[{x['findings'][0]}]")
+                if cmp:
+                    c3.caption(" · ".join(cmp))
+        elif courses and d < today:
+            c3.markdown(":red[:material/cancel: pas faite]")
+        elif courses:
+            c3.markdown(":gray[à venir]")
+        else:
+            c3.markdown(":gray[—]")
+        if day and editable(day):
             if c4.button("Modifier", key=f"edit-{k_}", icon=":material/edit:", width="stretch"):
                 editor(day)
             if k_ in pending and c4.button("Annuler", key=f"undo-{k_}", width="stretch"):
@@ -335,7 +399,7 @@ with st.expander("Ajuster plusieurs séances d'un coup", icon=":material/tune:")
     scope = st.radio("Portée", ["Cette semaine", "Toutes les semaines restantes"], horizontal=True, key="wk-scope")
     only_q = st.toggle("Seulement les séances de qualité", key="wk-q",
                        help="Laisse les footings et sorties longues faciles tels quels.")
-    pool = [stored[d.isoformat()] for d in dates] if scope == "Cette semaine" else [d for _, d in sorted(stored.items())]
+    pool = [stored[d.isoformat()] for d in dates if d.isoformat() in stored] if scope == "Cette semaine" else [d for _, d in sorted(stored.items())]
     future = [dy for dy in pool if editable(dy) and effective(dy)
               and (not only_q or any(pe.is_quality_course(c, a.threshold_pace) for c in effective(dy)))]
     vol = st.slider("Volume", 50, 150, 100, 5, format="%d %%", key="wk-vol")

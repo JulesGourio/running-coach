@@ -62,6 +62,11 @@ def sessions(db: DB, days: int = 60) -> list[dict]:
     return [_session_row(a, an.get(a["label_id"]), db.verdict(a["label_id"])) for a in db.activities(since)]
 
 
+def sessions_between(db: DB, since: str, until: str) -> list[dict]:
+    an = db.analyses()
+    return [_session_row(a, an.get(a["label_id"]), db.verdict(a["label_id"])) for a in db.activities(since, until)]
+
+
 def session_detail(db: DB, label_id: str, with_records: bool = False) -> dict | None:
     act = db.activity(label_id)
     if not act:
