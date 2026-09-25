@@ -9,6 +9,7 @@ pages = st.navigation([
     st.Page("views/sessions.py", title="Séances", icon=":material/directions_run:"),
     st.Page("views/load.py", title="Charge", icon=":material/monitor_heart:"),
     st.Page("views/progress.py", title="Progression", icon=":material/trending_up:"),
+    st.Page("views/history.py", title="Historique", icon=":material/history:"),
     st.Page("views/recovery.py", title="Récupération", icon=":material/bedtime:"),
     st.Page("views/plan.py", title="Plan", icon=":material/calendar_month:"),
     st.Page("views/library.py", title="Séances types", icon=":material/fitness_center:"),

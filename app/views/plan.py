@@ -18,6 +18,26 @@ a = service.athlete(db, s)
 today = date.today()
 st.title("Plan")
 
+# ---- which plan: the main (COROS) one, a draft, or a new one ----------------------------------------------
+import plan_drafts  # noqa: E402
+from coach import plan_builder as pb  # noqa: E402
+
+_drafts = pb.drafts(db)
+_labels = {"main": "Plan principal (COROS)", "new": "+ Nouveau plan",
+           **{d["id"]: f"{d['params']['name']}" + (" · brouillon" if d["status"] == "brouillon" else " · COROS") for d in _drafts}}
+if "plan-choice-next" in st.session_state:
+    st.session_state["plan-choice"] = st.session_state.pop("plan-choice-next")
+_kw = {} if "plan-choice" in st.session_state and st.session_state["plan-choice"] in _labels else {"default": "main"}
+if "plan-choice" in st.session_state and st.session_state["plan-choice"] not in _labels:
+    del st.session_state["plan-choice"]
+_choice = st.segmented_control("Plans", list(_labels), format_func=_labels.get, key="plan-choice", **_kw) or "main"
+if _choice == "new":
+    plan_drafts.generator(db, s)
+    st.stop()
+if _choice != "main":
+    plan_drafts.draft_view(db, s, next(d for d in _drafts if d["id"] == _choice))
+    st.stop()
+
 
 def reload_plan() -> None:
     from coach.sources.coros_mcp import CorosMCP, NeedsLogin, describe
