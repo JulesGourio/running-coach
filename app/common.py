@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from coach.config import Settings, get_settings  # noqa: E402
 from coach.db import DB  # noqa: E402
+from coach.metrics.zones import Athlete  # noqa: E402
 
 BLUE, ORANGE = "#2a78d6", "#eb6834"
 GOOD, WARN, CRIT, MUTED = "#0ca30c", "#fab219", "#d03b3b", "#898781"
@@ -90,6 +91,30 @@ def time_ticks(fig: go.Figure, values: list[float]) -> None:
     step = max(30, (hi - lo) // 5 // 30 * 30 or 30)
     ticks = list(range(lo, hi + 1, step))
     fig.update_yaxes(tickvals=ticks, ticktext=[fdur(t) for t in ticks])
+
+
+ZONE_PURPOSE = {
+    "Z1 récup": "Récupération : très facile, conversation aisée.",
+    "Z2 endurance": "Endurance fondamentale : l'essentiel du volume, ~80 % des séances.",
+    "Z3 tempo": "Tempo : zone grise, à limiter — ni vraiment facile ni vraiment qualité.",
+    "Z4 seuil": "Seuil : l'intensité maximale tenable environ 1 heure.",
+    "Z5 VO2max": "VO2max / VMA : efforts courts et intenses, fractionnés.",
+}
+
+
+def zone_table(a: Athlete) -> pd.DataFrame:
+    """Z1-Z5 with real bpm and pace bounds for this athlete, instead of bare zone names."""
+    hr_b, pace_b = a.hr_zone_bounds(), a.pace_zone_bounds()
+    rows = []
+    for i, ((name, hlo, hhi), (_, plo, phi)) in enumerate(zip(hr_b, pace_b)):
+        if i == 0:
+            hr_txt, pace_txt = f"< {hhi:.0f}", f"> {fpace(plo)}"
+        elif i == len(hr_b) - 1:
+            hr_txt, pace_txt = f"> {hlo:.0f}", f"< {fpace(phi)}"
+        else:
+            hr_txt, pace_txt = f"{hlo:.0f}–{hhi:.0f}", f"{fpace(plo)}–{fpace(phi)}"
+        rows.append({"Zone": name, "FC (bpm)": hr_txt, "Allure (min/km)": pace_txt, "But": ZONE_PURPOSE.get(name, "")})
+    return pd.DataFrame(rows)
 
 
 def sidebar() -> None:

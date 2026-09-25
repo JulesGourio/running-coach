@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from coach import service
-from common import LEVEL_COLOR, LEVEL_ICON, ctx, fdate, fdur, fnum
+from common import LEVEL_COLOR, LEVEL_ICON, ctx, fdate, fdur, fnum, fpace, zone_table
 
 s, db = ctx()
 st.title("Carnet de course")
@@ -40,6 +40,27 @@ with c2:
     else:
         st.markdown("Pas de séance prévue aujourd'hui.")
 
+a = service.athlete(db, s)
+fit_rows = db.fitness()
+vo2max = next((f["vo2max"] for f in reversed(fit_rows) if f.get("vo2max")), None)
+st.subheader("Profil & zones")
+pc = st.columns(5)
+pc[0].metric("FC max", f"{fnum(a.hr_max, 0)} bpm",
+             help="Fréquence cardiaque maximale. Estimée depuis tes séances (2e pic le plus haut sur 120 jours, "
+                  "pour ignorer un artefact capteur isolé) ; renseigne ATHLETE_HR_MAX dans .env pour la figer.")
+pc[1].metric("FC repos", f"{fnum(a.hr_rest, 0)} bpm", help="Médiane de ta FC de repos mesurée par la montre sur les 30 derniers jours.")
+pc[2].metric("FC seuil (LTHR)", f"{fnum(a.lt_hr, 0)} bpm",
+             help="FC au seuil lactique : l'intensité que tu peux tenir environ 1 heure. Estimée depuis ta meilleure "
+                  "moyenne sur 20 minutes continues, sinon 89 % de FC max par défaut.")
+pc[3].metric("Allure seuil", f"{fpace(a.threshold_pace)}/km",
+             help="Allure à l'intensité seuil. Vient du dernier bilan VO2max/prédictions de COROS.")
+pc[4].metric("VO2max", fnum(vo2max, 0) if vo2max else "—",
+             help="Consommation maximale d'oxygène, estimée par COROS à partir de tes séances : "
+                  "l'indicateur de référence de ta capacité aérobie. Sans unité affichée ici (ml/kg/min).")
+st.dataframe(zone_table(a), hide_index=True, width="stretch")
+st.caption("Zones calculées à partir de ta FC seuil et de ton allure seuil ci-dessus. Le seuil sépare l'endurance "
+           "du travail de qualité : viser ~80 % du temps d'entraînement en Z1-Z2.")
+
 lm = service.load_model(db)
 now = lm["now"]
 st.subheader("Charge d'entraînement")
@@ -52,13 +73,24 @@ k[4].metric("Monotonie", fnum(lm["monotony"], 1), help="Moyenne / écart-type de
 
 pr = service.progress(db, s)
 st.subheader("Objectif")
-rows = []
-for method, t in pr["predictions"].items():
-    rows.append({"Méthode": method, "10 km prédit": fdur(t),
-                 "Écart objectif A": ("+" if t > s.goal_a else "−") + fdur(abs(t - s.goal_a)),
-                 "Écart objectif B": ("+" if t > s.goal_b else "−") + fdur(abs(t - s.goal_b))})
-if rows:
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+preds = pr["predictions"]
+if "COROS" in preds:
+    t = preds["COROS"]
+    st.metric("Prédiction 10 km (COROS)", fdur(t),
+              help="Modèle propriétaire de COROS, recalculé à chaque séance à partir de l'historique complet. "
+                   "C'est la référence la plus fiable ici tant qu'aucune course ou effort continu 5/10 km "
+                   "n'a été couru pour la calibrer autrement.")
+    st.caption(f"Écart objectif A : {'+' if t > s.goal_a else '−'}{fdur(abs(t - s.goal_a))} · "
+               f"objectif B : {'+' if t > s.goal_b else '−'}{fdur(abs(t - s.goal_b))}")
+others = {k: v for k, v in preds.items() if k != "COROS"}
+if others:
+    with st.expander("Autres méthodes (recoupement)"):
+        rows = [{"Méthode": method, "10 km prédit": fdur(t)} for method, t in others.items()]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.caption("Calculées sur tes répétitions de qualité isolées des 90 derniers jours (pas d'effort continu "
+                   "5/10 km disponible cette année) : vitesse critique extrapole depuis des efforts courts (3-20 min), "
+                   "c'est le modèle le plus adapté à ce type de données. Riegel/VDOT restent moins fiables ici — "
+                   "à prendre comme indicatif, pas comme référence.")
 proj = pr["projection"]
 if proj:
     p = pr["probabilities"]
@@ -66,9 +98,7 @@ if proj:
                 f"(fourchette {fdur(proj['low'])} – {fdur(proj['high'])}), tendance {fnum(proj['slope_s_per_week'], 0)} s par semaine"
                 + (", plafonnée à 1 % de progrès par semaine" if proj["capped"] else "") + ".")
     st.markdown(f"Probabilité estimée : objectif A **{p.get('A', 0):.0%}** · objectif B **{p.get('B', 0):.0%}**")
-    st.caption("Estimation statistique à partir de la tendance récente de la prédiction. Elle suppose que l'entraînement continue au même rythme.")
-st.caption("Vitesse critique, Riegel et VDOT sont calculés sur tes meilleurs efforts à l'entraînement des 90 derniers jours, "
-           "pas sur des courses : c'est une estimation prudente.")
+    st.caption("Estimation statistique à partir de la tendance récente de la prédiction COROS. Elle suppose que l'entraînement continue au même rythme.")
 
 recent = service.sessions(db, 14)
 flags = Counter(f for x in recent for f in x["flags"])

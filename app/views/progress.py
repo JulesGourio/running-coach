@@ -50,6 +50,9 @@ if series:
 preds = pr["predictions"]
 if preds:
     st.subheader("Prédictions 10 km")
+    if "COROS" in preds:
+        st.caption("COROS est la référence la plus fiable tant qu'aucune course ou effort continu 5/10 km "
+                   "n'a été couru cette année pour recalibrer les autres méthodes.")
     st.dataframe(pd.DataFrame([{"Méthode": k_, "Temps": fdur(v), "Allure": f"{fpace(v / 10)}/km"} for k_, v in preds.items()]),
                  hide_index=True)
 
@@ -86,8 +89,5 @@ if be:
                  hide_index=True, width="stretch")
     st.caption("Efforts extraits de n'importe quelle portion de tes séances : un 5 km peut être la fin d'une sortie longue.")
 
-with st.expander("Profil utilisé pour les calculs"):
-    st.markdown(f"FC max {a['hr_max']:.0f} bpm · FC repos {a['hr_rest']:.0f} bpm · FC au seuil {a['lt_hr']:.0f} bpm · "
-                f"allure seuil {fpace(a['threshold_pace'])}/km")
-    st.caption("Estimés depuis tes données. Pour plus de précision, renseigne ATHLETE_HR_MAX, ATHLETE_LTHR et "
-               "ATHLETE_THRESHOLD_PACE dans le fichier .env (valeurs visibles dans l'app COROS, rubrique Zones).")
+st.caption(f"Profil : FC max {a['hr_max']:.0f} bpm · FC repos {a['hr_rest']:.0f} bpm · FC seuil {a['lt_hr']:.0f} bpm · "
+           f"allure seuil {fpace(a['threshold_pace'])}/km — détails et zones sur la page **Aujourd'hui**.")

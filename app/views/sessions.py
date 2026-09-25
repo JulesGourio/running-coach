@@ -88,6 +88,16 @@ if reps and reps.get("reps"):
                   "Distance (m)": round(done["distance_m"]) if done.get("distance_m") else None})
     st.dataframe(pd.DataFrame(t), hide_index=True, width="stretch")
 
+segments = v.get("segments")
+if segments:
+    st.subheader("Répétitions détectées")
+    st.caption("Séance hors plan : pas de cible à comparer, mais les répétitions rapides sont repérées "
+               "dans les données (isolées de la récupération entre elles).")
+    t = [{"#": sg["n"], "Distance (m)": round(sg["distance_m"]) if sg.get("distance_m") else None,
+          "Durée": fdur(sg["duration_s"]), "Allure": f"{fpace(sg['pace'])}/km" if sg.get("pace") else "—",
+          "FC moy.": round(sg["avg_hr"]) if sg.get("avg_hr") else None} for sg in segments]
+    st.dataframe(pd.DataFrame(t), hide_index=True, width="stretch")
+
 rec = d.get("records")
 if rec is not None and len(rec):
     rec = rec.copy()
@@ -104,14 +114,24 @@ if rec is not None and len(rec):
     fig.update_layout(title="Allure (min/km)", xaxis_title="km")
     c1.plotly_chart(fig, width="stretch")
     if rec["hr"].notna().any():
-        fig = go.Figure(go.Scatter(x=rec["km"], y=rec["hr"], mode="lines", line=dict(color=ORANGE, width=2), name="FC",
+        # Skip the first minute (sensor/HR cold start, often ~100 bpm on a run that's really 150+) so it
+        # doesn't stretch the axis and squash the zone lines into unreadable clutter near the top.
+        warmed = rec[rec["elapsed"] >= 60] if (rec["elapsed"] >= 60).any() else rec
+        fig = go.Figure(go.Scatter(x=warmed["km"], y=warmed["hr"], mode="lines", line=dict(color=ORANGE, width=2), name="FC",
                                    hovertemplate="%{x:.2f} km · %{y:.0f} bpm<extra></extra>"))
         a = service.athlete(db, s)
+        hr_vals = warmed["hr"].dropna()
+        if len(hr_vals):
+            lo_v, hi_v = hr_vals.quantile(0.02), hr_vals.quantile(0.98)
+            pad = max(3.0, (hi_v - lo_v) * 0.15)
+            fig.update_yaxes(range=[lo_v - pad, hi_v + pad])
         for name, lo, hi in a.hr_zone_bounds()[1:]:
-            fig.add_hline(y=lo, line=dict(color=MUTED, width=1, dash="dot"), annotation_text=name.split()[0],
-                          annotation_position="top left", annotation_font_color=MUTED)
+            fig.add_hline(y=lo, line=dict(color=MUTED, width=1, dash="dot"),
+                          annotation_text=f"{name.split()[0]} {lo:.0f}", annotation_position="top left",
+                          annotation_font_color=MUTED)
         style(fig, 260).update_layout(title="Fréquence cardiaque (bpm)", xaxis_title="km")
         c2.plotly_chart(fig, width="stretch")
+        c2.caption("1re minute masquée (montée en régime du capteur) pour garder une échelle lisible.")
 
 zc1, zc2 = st.columns(2)
 for col, key, title in ((zc1, "zones_hr", "Temps par zone de FC"), (zc2, "zones_pace", "Temps par zone d'allure")):
