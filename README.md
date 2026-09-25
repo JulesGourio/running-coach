@@ -118,6 +118,29 @@ Après un changement de profil, les analyses sont recalculées automatiquement.
   de plus de 3 h sur 7 nuits) avec l'heure de coucher, dette sur 7 nuits, régularité des horaires, moyennes par
   jour de semaine, mois et année, liste des siestes, VFC et FC de repos.
 
+## Navigation et nouveautés
+
+Onglets en haut de page (plus de barre latérale) : Aujourd'hui, Séances, Charge, Progression, Historique,
+Récupération, Plan, Séances types, Jour J, **Aide** (récapitulatif de chaque fonctionnalité et glossaire).
+
+- **Tous les sports** : randonnée, vélo, rameur… sont importés avec leurs FIT (carte, D+, FC), comptés dans la
+  charge (estimée d'après la FC et la durée) et visibles dans Séances et Historique.
+- **FIT au-delà du quota** : passé les 50 fichiers par jour du serveur officiel, la synchro passe par l'API web
+  COROS (`COROS_EMAIL`/`COROS_PASSWORD` dans `.env`).
+- **Cartes** : parcours coloré par l'allure et profil d'altitude pour chaque sortie ; carte de tous les parcours et
+  carte de chaleur dans Historique.
+- **Records personnels** : meilleur temps n'importe où dans une sortie (400 m au marathon), sans sauts GPS,
+  passages trop rapides pour la cadence ni descentes ; trail exclu (`coach/history.py:personal_records`).
+- **Alertes** (`coach/alerts.py`) en haut de la page Aujourd'hui : sommeil court avant une séance dure, FC de repos
+  en hausse, VFC basse, ratio de charge, dette de sommeil, hausse brutale du kilométrage, qualité manquée.
+- **Bilan hebdo** (`coach/report.py`) généré le lundi et archivé.
+- **Prédictions toutes distances** (5 km au marathon) et suivi des chances A/B semaine après semaine.
+- **Sommeil** en trois onglets : une nuit à la fois (navigation), statistiques, VFC et FC de repos.
+- **Jour J** (`coach/raceplan.py`) : allure km par km selon le profil (GPX, une sortie ou plat) et la météo
+  Open-Meteo (chaleur, vent), temps de passage, envoi sur la montre comme séance du jour de course.
+
+Outils MCP ajoutés : `alertes`, `bilan_semaine`, `modifications_plan`.
+
 ## Plusieurs plans
 
 L'onglet **Plan** montre le plan principal (celui en cours dans COROS) et des plans en brouillon. « + Nouveau
