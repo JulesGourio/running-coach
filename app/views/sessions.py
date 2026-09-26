@@ -58,13 +58,11 @@ else:
     st.caption("Séance hors plan.")
 
 cv = d.get("coach_verdict")
-if not is_run:
-    pass
-elif cv:
+if cv:
     with st.container(border=True):
         st.markdown("**Verdict du coach**" + (f" · {fnum(cv['score'])}/10" if cv.get("score") is not None else ""))
         st.markdown(cv["text"])
-else:
+elif is_run:
     st.caption(f"Pas encore de verdict rédigé. Dans Claude Code : « juge ma séance du {fdate(choice['date'])} ».")
 
 if v.get("findings"):
