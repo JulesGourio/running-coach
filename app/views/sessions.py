@@ -88,30 +88,51 @@ if not m:
 
 dec = (m.get("decoupling") or {}).get("decoupling_pct")
 easy_pct = sum((m.get("zones_hr") or {}).get(k_, 0) for k_ in ("Z1 récup", "Z2 endurance")) if m.get("zones_hr") else None
-grid = [
-    ("Distance", f"{fnum(m['distance_m'] / 1000, 2)} km", None),
-    ("Temps en mouvement", fdur(m["moving_s"]), None),
-    ("Allure moyenne", f"{fpace(m['avg_pace'])}/km", None),
-    ("FC moyenne", f"{fnum(m['avg_hr'], 0)} bpm", None),
-    ("FC max", f"{fnum(m.get('max_hr'), 0)} bpm", None),
-    ("Temps en endurance", f"{easy_pct:.0%}" if easy_pct is not None else "—", "Part du temps en zones 1 et 2 (FC)."),
-    ("Dénivelé +", f"{fnum(m['ascent_m'], 0)} m", None),
-    ("Cadence", f"{fnum(m['cadence'], 0)} pas/min", None),
-    ("Foulée", f"{fnum(m['stride_m'], 2)} m", None),
-    ("Dérive cardiaque", f"{fnum(dec, 1)} %" if dec is not None else "—",
-     "Hausse de la FC à allure égale entre la 1re et la 2de moitié. Sous 5 % : endurance solide."),
-    ("Charge", fnum(m["rtss"], 0), "Intensité × durée : 100 = une heure courue à ton allure seuil."),
-]
-if not is_run:
+km = m["distance_m"] / 1000
+up, down = m.get("ascent_m") or 0, m.get("descent_m") or 0
+hilly = choice.get("sport_type") in (102, 104, 204) or (km > 0 and up / km >= 15)
+stopped = (m.get("elapsed_s") or 0) - (m.get("moving_s") or 0)
+H_EFFORT = ("Allure équivalente sur le plat pour le même effort : les montées la rendent plus rapide que l'allure réelle, "
+            "les descentes raides plus lente. Sert à comparer une sortie vallonnée à une sortie plate.")
+H_KME = "Kilomètres-effort : distance + D+ / 100 (100 m de montée ≈ 1 km à plat). La mesure usuelle de la taille d'un trail."
+H_VERT = "Mètres de dénivelé gagnés par heure passée à monter (pente > 5 %)."
+H_MOVE = "Temps pendant lequel tu avançais, marche comprise, sans les arrêts."
+if is_run:
+    grid = [
+        ("Distance", f"{fnum(km, 2)} km", None),
+        ("Temps en mouvement", fdur(m["moving_s"]), H_MOVE + (f" Arrêts : {fdur(stopped)}." if stopped > 60 else "")),
+        ("Allure moyenne", f"{fpace(m['avg_pace'])}/km", "Distance / temps en mouvement."),
+        ("FC moyenne", f"{fnum(m['avg_hr'], 0)} bpm", None),
+        ("FC max", f"{fnum(m.get('max_hr'), 0)} bpm", None),
+        ("Temps en endurance", f"{easy_pct:.0%}" if easy_pct is not None else "—", "Part du temps en zones 1 et 2 (FC)."),
+        ("Dénivelé", f"+{fnum(up, 0)} / -{fnum(down, 0)} m", None),
+    ]
+    if hilly:
+        grid += [("Allure d'effort", f"{fpace(m.get('effort_pace'))}/km" if m.get("effort_pace") else "—", H_EFFORT),
+                 ("Km-effort", fnum(km + up / 100, 1), H_KME),
+                 ("Vitesse ascensionnelle", f"{fnum(m.get('climb_rate'), 0)} m/h" if m.get("climb_rate") else "—", H_VERT)]
+    grid += [
+        ("Cadence", f"{fnum(m['cadence'], 0)} pas/min", None),
+        *([] if hilly else [("Dérive cardiaque", f"{fnum(dec, 1)} %" if dec is not None else "—",
+                              "Hausse de la FC à allure égale entre la 1re et la 2de moitié. Sous 5 % : endurance solide.")]),
+        ("Charge", fnum(m.get("load"), 0), "Intensité × durée : 100 = une heure courue à ton allure seuil."),
+    ]
+else:
     spd = m["distance_m"] / m["moving_s"] * 3.6 if m.get("moving_s") else None
-    grid = [("Distance", f"{fnum(m['distance_m'] / 1000, 2)} km", None), ("Temps en mouvement", fdur(m["moving_s"]), None),
-            ("Durée totale", fdur(m.get("elapsed_s")), None), ("Vitesse moyenne", f"{fnum(spd, 1)} km/h" if spd else "—", None),
-            ("Dénivelé +", f"{fnum(m['ascent_m'], 0)} m", None), ("FC moyenne", f"{fnum(m['avg_hr'], 0)} bpm", None),
-            ("FC max", f"{fnum(m.get('max_hr'), 0)} bpm", None),
-            ("Calories", f"{choice['calories']:.0f} kcal" if choice.get("calories") else "—", None)]
-cols = st.columns(6)
-for i, (k, val, h) in enumerate(grid):
-    cols[i % 6].metric(k, val, help=h, border=True)
+    grid = [("Distance", f"{fnum(km, 2)} km", None),
+            ("Temps en mouvement", fdur(m["moving_s"]), H_MOVE),
+            ("Durée totale", fdur(m.get("elapsed_s")), f"Arrêts et pauses : {fdur(stopped)}." if stopped > 60 else None),
+            ("Vitesse en mouvement", f"{fnum(spd, 1)} km/h" if spd else "—", None),
+            ("Dénivelé", f"+{fnum(up, 0)} / -{fnum(down, 0)} m", None)]
+    if hilly:
+        grid += [("Km-effort", fnum(km + up / 100, 1), H_KME),
+                 ("Vitesse ascensionnelle", f"{fnum(m.get('climb_rate'), 0)} m/h" if m.get("climb_rate") else "—", H_VERT)]
+    grid += [("FC moyenne", f"{fnum(m['avg_hr'], 0)} bpm", None), ("FC max", f"{fnum(m.get('max_hr'), 0)} bpm", None),
+             ("Calories", f"{choice['calories']:.0f} kcal" if choice.get("calories") else "—", None)]
+ncol = 6 if len(grid) > 10 else 5
+for i in range(0, len(grid), ncol):
+    for c_, (k, val, h) in zip(st.columns(ncol), grid[i:i + ncol]):
+        c_.metric(k, val, help=h, border=True)
 
 # ---- map and elevation ----------------------------------------------------------------------------------
 rec0 = d.get("records")
@@ -139,6 +160,72 @@ if rec0 is not None and len(rec0) and rec0["lat"].notna().sum() > 10:
     if len(alt) > 10:
         mc2.plotly_chart(elevation_fig(alt["distance"] / 1000, alt["altitude"], height=300), width="stretch")
         mc2.caption(f"D+ {fnum(m.get('ascent_m'), 0)} m · point haut {alt['altitude'].max():.0f} m · point bas {alt['altitude'].min():.0f} m")
+
+# ---- terrain: altitude with pace/effort pace, pace by slope, km splits ---------------------------------------
+splits = m.get("splits") or []
+if rec0 is not None and len(rec0) and hilly and rec0["altitude"].notna().sum() > 30:
+    st.subheader("Relief et effort", divider="gray")
+    r_ = rec0.dropna(subset=["distance"])
+    alt_s = r_["altitude"].interpolate(limit_direction="both").rolling(15, center=True, min_periods=1).mean()
+    step = max(1, len(r_) // 1500)
+    fig = go.Figure()
+    fig.add_scatter(x=r_["distance"][::step] / 1000, y=alt_s[::step], mode="lines", fill="tozeroy", name="Altitude", yaxis="y2",
+                    line=dict(color="#0d9488", width=1.5), fillcolor="rgba(13,148,136,0.15)",
+                    hovertemplate="%{y:.0f} m<extra>altitude</extra>")
+    if is_run and splits:
+        xs = [sp_["km"] - 0.5 for sp_ in splits]
+        eff = [sp_.get("effort_pace") for sp_ in splits]
+        fig.add_scatter(x=xs, y=[sp_["pace"] for sp_ in splits], mode="lines+markers", name="Allure réelle",
+                        line=dict(color=BLUE, width=2.5), customdata=[fpace(sp_["pace"]) for sp_ in splits],
+                        hovertemplate="%{customdata}/km<extra>allure réelle</extra>")
+        fig.add_scatter(x=xs, y=eff, mode="lines+markers", name="Allure d'effort (équivalent plat)",
+                        line=dict(color=ORANGE, width=2, dash="dot"), customdata=[fpace(e) for e in eff],
+                        hovertemplate="%{customdata}/km<extra>allure d'effort</extra>")
+        style(fig, 340, "pace").update_layout(title="Allure par km sur le profil", xaxis_title="km")
+        pace_ticks(fig, [sp_["pace"] for sp_ in splits] + [e for e in eff if e])  # per-km values: no GPS spikes to trim
+    elif splits:
+        v_km = [3600 / sp_["pace"] for sp_ in splits]
+        fig.add_scatter(x=[sp_["km"] - 0.5 for sp_ in splits], y=v_km, mode="lines+markers", name="Vitesse en mouvement",
+                        line=dict(color=BLUE, width=2.5),
+                        customdata=list(zip([round(sp_["up"]) for sp_ in splits], [round(sp_["down"]) for sp_ in splits])),
+                        hovertemplate="%{y:.1f} km/h · D+ %{customdata[0]} m · D- %{customdata[1]} m<extra></extra>")
+        style(fig, 340).update_layout(title="Vitesse par km sur le profil", xaxis_title="km")
+        fig.update_yaxes(range=[0, max(6.0, max(v_km) * 1.15)], ticksuffix=" km/h")
+    span = float(alt_s.max() - alt_s.min()) or 10.0
+    fig.update_layout(yaxis2=dict(overlaying="y", side="right", showgrid=False, ticksuffix=" m",
+                                  range=[alt_s.min() - span * 0.05, alt_s.max() + span * 0.9]))
+    st.plotly_chart(fig, width="stretch")
+
+    gb = m.get("grade_bins") or []
+    if len(gb) >= 2:
+        c1, c2 = st.columns(2)
+        if is_run:
+            txt = [f"{fpace(1000 / g_['speed'])}/km · {g_['share']:.0%}" if g_["speed"] > 0.3 else "" for g_ in gb]
+        else:
+            txt = [f"{fnum(g_['speed'] * 3.6, 1)} km/h · {g_['share']:.0%}" for g_ in gb]
+        colors = ["#2e6fdb" if g_["name"].startswith(("<", "-")) else "#64748b" if g_["name"] == "plat" else "#dc2626" for g_ in gb]
+        fig = go.Figure(go.Bar(y=[g_["name"] for g_ in gb], x=[g_["share"] * 100 for g_ in gb], orientation="h", marker_color=colors,
+                               text=txt, textposition="auto", hovertemplate="%{y} : %{text}<extra></extra>"))
+        style(fig, 300).update_layout(title=("Allure" if is_run else "Vitesse") + " selon la pente (barre = part du temps)",
+                                      hovermode="closest", xaxis=dict(ticksuffix=" %"))
+        c1.plotly_chart(fig, width="stretch")
+        ups = [g_ for g_ in gb if g_["name"][0].isdigit() or g_["name"].startswith(">")]
+        if ups:
+            fig = go.Figure(go.Bar(x=[g_["name"] for g_ in ups], y=[g_["vert_m_h"] for g_ in ups], marker_color="#dc2626",
+                                   text=[f"{g_['vert_m_h']:.0f} m/h" for g_ in ups], textposition="outside"))
+            style(fig, 300).update_layout(title="Vitesse ascensionnelle selon la pente", hovermode="closest",
+                                          yaxis=dict(range=[0, max(g_["vert_m_h"] for g_ in ups) * 1.25], ticksuffix=" m/h"))
+            c2.plotly_chart(fig, width="stretch")
+            c2.caption("Repères : 400-600 m/h en randonnée, 700-1000 m/h en trail soutenu.")
+
+if len(splits) >= 2:
+    with st.expander(f"Kilomètre par kilomètre ({len(splits)})", expanded=hilly, icon=":material/table_rows:"):
+        st.dataframe(pd.DataFrame([{
+            "Km": sp_["km"], "Temps": fdur(sp_["time_s"]),
+            ("Allure" if is_run else "Vitesse"): f"{fpace(sp_['pace'])}/km" if is_run else f"{fnum(3600 / sp_['pace'], 1)} km/h",
+            **({"Allure d'effort": f"{fpace(sp_['effort_pace'])}/km" if sp_.get("effort_pace") else "—"} if is_run and hilly else {}),
+            "D+": round(sp_["up"]), "D-": round(sp_["down"]), "Pente": f"{sp_['grade'] * 100:+.0f} %".replace("+0 %", "0 %"),
+            "FC": round(sp_["hr"]) if sp_.get("hr") else None} for sp_ in splits]), hide_index=True, width="stretch")
 
 reps = v.get("reps")
 if reps and reps.get("reps"):
@@ -170,11 +257,12 @@ rec = d.get("records")
 if rec is not None and len(rec) and is_run:
     rec = rec.copy()
     rec["km"] = rec["distance"] / 1000
-    moving = rec["speed"] > 1.2
+    moving = rec["speed"] > 0.8
     sm = rec["speed"].where(moving).rolling(20, min_periods=5, center=True).mean()
     rec["pace"] = (1000 / sm).where(sm > 1.2)
     a = service.athlete(db, s)
-    reps_idx = [sg for sg in hard_segments(m, a) if sg["end_idx"] < len(rec)]
+    quality = (v.get("type_fr") or "").startswith(("VMA", "Seuil", "Allure", "Tempo", "Fartlek", "Côtes", "Course", "Sortie longue avec"))
+    reps_idx = [sg for sg in hard_segments(m, a) if sg["end_idx"] < len(rec)] if quality else []
 
     # Pace, with each detected rep shaded and the threshold pace as a reference line.
     fig = go.Figure()

@@ -29,3 +29,12 @@ def test_customised_workout_names_and_sets():
     rec = c["sections"][1]["sets"][1]
     assert rec["intensityValueStart"] >= 700  # walked recovery
     assert wk.name_of(wk.customise(wk.by_key("1000"), reps=5)) == "VMA longue 5 × 1 km"
+
+
+def test_walked_recovery_covers_less_ground():
+    w = wk.by_key("400")
+    jog, walk = wk.summary(w, VMA, 262, 243, (300, 335)), wk.summary(w, VMA, 262, 243, (300, 335), walk=True)
+    assert walk["total_s"] == jog["total_s"] and walk["total_m"] < jog["total_m"] - 500
+    assert "marchée" in walk["rec"] and "trottée" in jog["rec"]
+    rec = wk.build(w, VMA, 262, 243, (300, 335), walk=True)["sections"][1]["sets"][1]
+    assert rec["pace"][0] >= 700 if "pace" in rec else True

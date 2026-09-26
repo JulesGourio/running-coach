@@ -72,7 +72,7 @@ def card(w: wk.Workout) -> None:
                 w = wk.customise(w, reps=reps, value=value, lo=lo, hi=hi, rec=rec, rec_unit=rec_unit, sets=sets, set_rec_s=set_rec)
             else:
                 st.caption("Pyramide : distances et intensités fixes, seules la VMA et la récupération (trottée/marchée) changent.")
-        sm = wk.summary(w, vma, thr, goal, easy)
+        sm = wk.summary(w, vma, thr, goal, easy, walk)
         c1, c2, c3 = st.columns([3, 2, 2], vertical_alignment="center")
         color = type_color({"Fractionné court": "VMA", "Fractionné long": "VMA", "Seuil": "Seuil",
                             "Allure spécifique 10 km": "Allure", "Côtes": "Côtes"}.get(w.category, "Fartlek"))
@@ -81,6 +81,7 @@ def card(w: wk.Workout) -> None:
         lo, hi = sm["pace"]
         c2.markdown(f"**{fpace(lo)}–{fpace(hi)}/km**  \n:gray[{sm['per_rep']}]" if w.intensity != "cote"
                     else "**Effort en côte**  \n:gray[à la sensation, FC proche du seuil]")
+        c2.markdown(f":{'green' if walk else 'blue'}[{sm['rec']}]")
         c3.markdown(f"≈ **{fnum(sm['total_m'] / 1000, 1)} km** · {fdur(sm['total_s'])}  \n"
                     f":gray[dont {fnum(sm['work_m'] / 1000, 1)} km d'effort]")
         if days:

@@ -51,10 +51,11 @@ with st.container(horizontal=True):
     st.metric("Sorties", cur["sessions"], border=True, delta=delta(cur["sessions"], prev["sessions"]) if days else None)
     st.metric("Temps", f"{fnum(cur['hours'], 0)} h", border=True, delta=delta(cur["hours"], prev["hours"], " h") if days else None)
     st.metric("Par semaine", f"{fnum(cur['km_week'], 1)} km", border=True, delta=f"{fnum(cur['sessions_week'], 1)} sorties", delta_color="off")
-    st.metric("Allure moyenne", f"{fpace(cur['pace'])}/km" if cur["pace"] else "—", border=True)
+    st.metric("Allure moyenne", f"{fpace(cur['pace'])}/km" if cur["pace"] else "—", border=True,
+              help="Sorties sur route, piste et tapis seulement (temps total / distance) : trail et autres sports la fausseraient.")
     if cur["longest"]:
         lg = cur["longest"]
-        st.metric("Plus longue", f"{fnum(lg['distance_km'], 1)} km", border=True,
+        st.metric("Plus longue de la période", f"{fnum(lg['distance_km'], 1)} km", border=True,
                   delta=f"{fdate(lg['date'].date())} · {fdur(lg['duration_s'])}", delta_color="off")
 
 # ---- volume --------------------------------------------------------------------------------------------
@@ -108,11 +109,11 @@ style(fig, 280).update_layout(title="Kilomètres par année", showlegend=False, 
 c1.plotly_chart(fig, width="stretch")
 c2.dataframe(pd.DataFrame({"Année": yr["year"].astype(str), "Km": yr["km"].round(0), "Sorties": yr["sessions"],
                            "Heures": yr["hours"].round(0), "Plus longue": yr["longest"].map(lambda v: f"{v:.1f} km"),
-                           "Allure": yr["pace"].map(lambda v: f"{fpace(v)}/km")}), hide_index=True, width="stretch")
+                           "Allure (route)": yr["pace"].map(lambda v: f"{fpace(v)}/km" if v == v and v else "—")}), hide_index=True, width="stretch")
 
 lg = rec["longest"]
 with st.container(horizontal=True):
-    st.metric("Plus longue sortie", f"{fnum(lg['distance_km'], 1)} km", border=True,
+    st.metric("Plus longue sortie (depuis le début)", f"{fnum(lg['distance_km'], 1)} km", border=True,
               delta=f"{fdate(lg['date'].date())} · {fdur(lg['duration_s'])}", delta_color="off")
     st.metric("Plus grosse semaine", f"{fnum(rec['best_week'][1], 0)} km", border=True,
               delta=f"semaine du {fdate(rec['best_week'][0])}", delta_color="off")

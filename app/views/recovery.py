@@ -78,32 +78,49 @@ with tab_night:
             st.metric("Score COROS", f"{last['score']:.0f}/100", border=True)
             st.metric("Réveils > 5 min", f"{last['awake_count']:.0f}" if last["awake_count"] == last["awake_count"] else "—", border=True,
                       delta=f"{dur(last['awake_min'])} éveillé" if last["awake_min"] == last["awake_min"] else None, delta_color="off")
-        with st.container(horizontal=True):
-            for k, name in sl.PHASE_FR.items():
-                lo, hi = sl.PHASE_REF[k]
-                v = last[k]
-                ok = v == v and lo <= v <= hi
-                st.metric(name, f"{v:.0f} %" if v == v else "—", border=True,
-                          delta=f"{dur(last[k.replace('_pct', '_min')])} · repère {lo}-{hi} %", delta_color="normal" if ok else "inverse",
-                          help={"deep_pct": "Sommeil profond : récupération physique, hormone de croissance. Repère 13-23 %.",
-                                "light_pct": "Sommeil léger : l'essentiel de la nuit. Repère 45-60 %.",
-                                "rem_pct": "Sommeil paradoxal : récupération nerveuse, mémoire. Repère 20-25 %.",
-                                "awake_pct": "Éveils dans la nuit. Repère sous 5 %."}[k])
-
-
-        phases = [("Profond", last["deep_min"], "#1e3a8a"), ("Léger", last["light_min"], "#60a5fa"), ("Paradoxal", last["rem_min"], "#a855f7"),
-                  ("Éveil", last["awake_min"], "#fbbf24"), ("Siestes", last["naps_min"], "#10b981")]
+        # 24 h timeline, from 18:00 the evening before to 18:00 on the wake-up day (hours after noon of the night)
+        noon = pd.Timestamp(last["night"].date()) + pd.Timedelta(hours=12)
+        rel = lambda ts: (pd.Timestamp(ts) - noon).total_seconds() / 3600  # noqa: E731
         fig = go.Figure()
-        for name, v_, c_ in phases:
-            if v_ == v_ and v_:
-                fig.add_bar(y=[""], x=[v_ / 60], name=name, orientation="h", marker_color=c_,
-                            hovertemplate=f"{name} : {dur(v_)}<extra></extra>", text=[dur(v_)], textposition="inside")
-        fig.add_vline(x=sl.TARGET_MIN / 60, line=dict(color=MUTED, dash="dash"), annotation_text="8 h")
-        style(fig, 150).update_layout(barmode="stack", title="Répartition de la journée de sommeil (h)", showlegend=True,
-                                      legend=dict(orientation="h", y=-0.3), hovermode="closest")
+        if last["bed_h"] == last["bed_h"] and last["wake_h"] == last["wake_h"]:
+            fig.add_bar(y=["Sommeil"], x=[last["wake_h"] + 12 - last["bed_h"]], base=[last["bed_h"]], orientation="h", name="Nuit",
+                        marker=dict(color="#3b5bdb", cornerradius=6), width=0.55, text=[dur(last["main_min"])],
+                        textposition="inside", insidetextanchor="middle", textfont=dict(color="white"),
+                        hovertemplate=f"Nuit {sl.hhmm(last['bed_h'], evening=True)} → {sl.hhmm(last['wake_h'])}<extra></extra>")
+        for n_ in last["naps"] or []:
+            a_, b_ = rel(n_["start"]), rel(n_["end"])
+            fig.add_bar(y=["Sommeil"], x=[b_ - a_], base=[a_], orientation="h", name="Sieste", marker=dict(color="#10b981", cornerradius=6),
+                        width=0.55, hovertemplate=f"Sieste {n_['start'][-5:]} → {n_['end'][-5:]}<extra></extra>", showlegend=False)
+        ends = [rel(n_["end"]) for n_ in last["naps"] or []] + [last["wake_h"] + 12 if last["wake_h"] == last["wake_h"] else 20]
+        starts = [rel(n_["start"]) for n_ in last["naps"] or []] + [last["bed_h"] if last["bed_h"] == last["bed_h"] else 10]
+        x0, x1 = min(6, int(min(starts)) - 1), max(30, int(max(ends)) + 2)
+        ticks = list(range(x0 + x0 % 2, x1 + 1, 2))
+        style(fig, 150).update_layout(barmode="overlay", showlegend=False, hovermode="closest", margin=dict(t=36, b=30),
+                                      title="La journée : nuit (bleu) et siestes (vert)",
+                                      xaxis=dict(range=[x0, x1], tickvals=ticks, ticktext=[sl.hhmm(t_, evening=True) for t_ in ticks],
+                                                 showgrid=True, gridcolor="rgba(137,135,129,0.2)"))
+        fig.update_yaxes(showticklabels=False)
+        fig.add_vrect(x0=12, x1=12, line=dict(color=MUTED, width=1, dash="dot"))
         st.plotly_chart(fig, width="stretch")
-        if last["naps"]:
-            st.caption("Siestes : " + " · ".join(f"{n_['start'][-5:]} → {n_['end'][-5:]}" for n_ in last["naps"]))
+
+        # phases against their reference range: grey band = normal, colored bar = this night
+        ph = [(k, name, c_) for (k, name), c_ in zip(sl.PHASE_FR.items(), ["#1e3a8a", "#60a5fa", "#a855f7", "#f59e0b"])]
+        if any(last[k] == last[k] for k, *_ in ph):
+            names = [name for _, name, _ in ph][::-1]
+            fig = go.Figure()
+            fig.add_bar(y=names, x=[sl.PHASE_REF[k][1] - sl.PHASE_REF[k][0] for k, *_ in ph][::-1],
+                        base=[sl.PHASE_REF[k][0] for k, *_ in ph][::-1], orientation="h", width=0.8, name="Repère",
+                        marker=dict(color="rgba(148,163,184,0.28)"), hoverinfo="skip")
+            vals = [last[k] if last[k] == last[k] else 0 for k, *_ in ph][::-1]
+            ok = [sl.PHASE_REF[k][0] <= last[k] <= sl.PHASE_REF[k][1] for k, *_ in ph][::-1]
+            txt = [f"{v_:.0f} % · {dur(last[k.replace('_pct', '_min')])}" + ("" if o_ else "  ⚠") for v_, o_, (k, *_) in zip(vals, ok, ph[::-1])]
+            fig.add_bar(y=names, x=vals, orientation="h", width=0.36, name="Cette nuit", marker=dict(color=[c_ for *_, c_ in ph][::-1], cornerradius=4),
+                        text=txt, textposition="outside", cliponaxis=False, hovertemplate="%{y} : %{x:.0f} %<extra></extra>")
+            style(fig, 230).update_layout(barmode="overlay", title="Phases de la nuit (bande grise : zone normale)", showlegend=False,
+                                          hovermode="closest", xaxis=dict(range=[0, max(75, max(vals) + 20)], ticksuffix=" %"))
+            st.plotly_chart(fig, width="stretch")
+            st.caption("Profond : récupération physique (13-23 %). Léger : l'essentiel de la nuit (45-60 %). "
+                       "Paradoxal : récupération nerveuse et mémoire (20-25 %). Éveil : sous 5 %.")
 
 with tab_stats:
     # ---- period ----------------------------------------------------------------------------------------------
@@ -126,49 +143,75 @@ with tab_stats:
     # ---- nights: phases + naps -----------------------------------------------------------------------------
     weekly = len(df) > 120
     g = df.set_index("night").resample("W-MON", label="left").mean(numeric_only=True).reset_index() if weekly else df
+    g = g.dropna(subset=["total_min"])
     fig = go.Figure()
-    colors = {"deep_min": "#1e3a8a", "light_min": "#60a5fa", "rem_min": "#a855f7", "awake_min": "#fbbf24", "naps_min": "#10b981"}
-    names = {"deep_min": "Profond", "light_min": "Léger", "rem_min": "Paradoxal", "awake_min": "Éveil", "naps_min": "Siestes"}
-    for k, c in colors.items():
-        fig.add_bar(x=g["night"], y=g[k] / 60, name=names[k], marker_color=c,
-                    hovertemplate="%{x|%d %b} · " + names[k] + " %{y:.1f} h<extra></extra>")
+    fig.add_bar(x=g["night"], y=g["main_min"] / 60, name="Nuit", marker=dict(color="#93c5fd"),
+                customdata=g["main_min"].map(dur), hovertemplate="%{x|%d %b} · nuit %{customdata}<extra></extra>")
+    fig.add_bar(x=g["night"], y=g["naps_min"].fillna(0) / 60, name="Siestes", marker=dict(color="#10b981"),
+                customdata=g["naps_min"].fillna(0).map(dur), hovertemplate="siestes %{customdata}<extra></extra>")
+    if not weekly:
+        roll = g.set_index("night")["total_min"].rolling("7D", min_periods=3).mean()
+        fig.add_scatter(x=roll.index, y=roll / 60, mode="lines", name="Moyenne 7 jours", line=dict(color="#1e3a8a", width=2.5, shape="spline"),
+                        customdata=roll.map(dur), hovertemplate="moyenne 7 j %{customdata}<extra></extra>")
     fig.add_hline(y=sl.TARGET_MIN / 60, line=dict(color=MUTED, dash="dash"), annotation_text="8 h", annotation_font_color=MUTED)
-    style(fig, 320).update_layout(barmode="stack", title="Sommeil par " + ("semaine (moyenne par nuit)" if weekly else "nuit") + " : phases et siestes (h)",
-                                  hovermode="x unified")
+    style(fig, 300).update_layout(barmode="stack", bargap=0.25, hovermode="x unified",
+                                  title="Durée de sommeil par " + ("semaine (moyenne par jour)" if weekly else "jour") + " : nuit + siestes",
+                                  yaxis=dict(ticksuffix=" h", range=[0, max(10, float((g["total_min"] / 60).max()) + 0.5)]))
     st.plotly_chart(fig, width="stretch")
 
     c1, c2 = st.columns(2)
-    fig = go.Figure()
-    fig.add_scatter(x=df["night"], y=df["bed_h"], mode="markers", name="Coucher", marker=dict(color="#6366f1", size=6),
-                    customdata=df["bed_h"].map(lambda h: sl.hhmm(h, evening=True)), hovertemplate="%{x|%d %b} coucher %{customdata}<extra></extra>")
-    fig.add_scatter(x=df["night"], y=df["wake_h"] + 12, mode="markers", name="Lever", marker=dict(color=ORANGE, size=6),
-                    customdata=df["wake_h"].map(sl.hhmm), hovertemplate="%{x|%d %b} lever %{customdata}<extra></extra>")
-    ticks = list(range(8, 24, 2))
-    style(fig, 280).update_layout(title="Heures de coucher et de lever", hovermode="closest")
-    fig.update_yaxes(tickvals=ticks, ticktext=[sl.hhmm(t, evening=True) for t in ticks], autorange="reversed")
-    c1.plotly_chart(fig, width="stretch")
+    q = df.dropna(subset=["deep_pct", "rem_pct"]).set_index("night")
+    if len(q) >= 5:
+        fig = go.Figure()
+        for k, name, c_, (lo, hi) in (("deep_pct", "Profond", "#1e3a8a", sl.PHASE_REF["deep_pct"]),
+                                      ("rem_pct", "Paradoxal", "#a855f7", sl.PHASE_REF["rem_pct"])):
+            fig.add_hrect(y0=lo, y1=hi, fillcolor=tint(c_, 0.10), line_width=0, layer="below")
+            fig.add_scatter(x=q.index, y=q[k], mode="markers", marker=dict(color=tint(c_, 0.35), size=5), showlegend=False, hoverinfo="skip")
+            sm = q[k].rolling("7D", min_periods=2).mean()
+            fig.add_scatter(x=sm.index, y=sm, mode="lines", name=name, line=dict(color=c_, width=2.5, shape="spline"),
+                            hovertemplate=name + " %{y:.0f} % (moy. 7 j)<extra></extra>")
+        style(fig, 300).update_layout(title="Qualité : part de profond et de paradoxal (bandes : zone normale)",
+                                      yaxis=dict(ticksuffix=" %", range=[0, 45]), hovermode="x unified")
+        c1.plotly_chart(fig, width="stretch")
+
+    # sleep window of every night: a floating bar from bedtime to wake-up (y reversed: evening at the top)
+    w_ = df.dropna(subset=["bed_h", "wake_h"])
+    if len(w_):
+        span = w_["wake_h"] + 12 - w_["bed_h"]
+        fig = go.Figure(go.Bar(x=w_["night"], y=span, base=w_["bed_h"],
+                               marker=dict(color=["#3b5bdb" if m_ >= 420 else "#f59e0b" for m_ in w_["main_min"].fillna(0)]),
+                               customdata=list(zip(w_["bed_h"].map(lambda h: sl.hhmm(h, evening=True)), w_["wake_h"].map(sl.hhmm),
+                                                   w_["main_min"].map(dur))),
+                               hovertemplate="%{x|%d %b} · %{customdata[0]} → %{customdata[1]} (%{customdata[2]})<extra></extra>"))
+        lo_, hi_ = float(w_["bed_h"].quantile(0.02)) - 0.5, float((w_["wake_h"] + 12).quantile(0.98)) + 0.5
+        ticks = [t_ for t_ in range(int(lo_) - 1, int(hi_) + 2) if t_ % 2 == 0]
+        style(fig, 300).update_layout(title="Fenêtre de sommeil : coucher → lever (orange : nuit sous 7 h)", hovermode="closest",
+                                      bargap=0.3, showlegend=False)
+        fig.update_yaxes(range=[hi_, lo_], tickvals=ticks, ticktext=[sl.hhmm(t_, evening=True) for t_ in ticks])
+        c2.plotly_chart(fig, width="stretch")
+
+    c1, c2 = st.columns(2)
 
     wd = sl.by_period(df, "weekday")
     fig = go.Figure(go.Bar(x=[sl.WEEKDAYS[i][:3] for i in wd["key"]], y=wd["total"] / 60, marker_color=BLUE,
                            customdata=wd["total"].map(dur), hovertemplate="nuit du %{x} : %{customdata}<extra></extra>",
                            text=wd["total"].map(dur), textposition="outside"))
     fig.add_hline(y=sl.TARGET_MIN / 60, line=dict(color=MUTED, dash="dash"))
-    style(fig, 280).update_layout(title="Moyenne par jour de la semaine (nuit du …)", showlegend=False, hovermode="closest",
+    style(fig, 300).update_layout(title="Moyenne par jour de la semaine (nuit du …)", showlegend=False, hovermode="closest",
                                   yaxis=dict(range=[0, max(10, (wd["total"].max() or 0) / 60 + 1)]))
-    c2.plotly_chart(fig, width="stretch")
+    c1.plotly_chart(fig, width="stretch")
 
     mo = sl.by_period(all_df, "month")
     yr = sl.by_period(all_df, "year")
-    c1, c2 = st.columns([2, 1])
     fig = go.Figure()
     fig.add_bar(x=mo["key"], y=mo["main"] / 60, name="Nuit", marker_color="#60a5fa")
     fig.add_bar(x=mo["key"], y=mo["naps"] / 60, name="Siestes", marker_color="#10b981")
     fig.add_hline(y=sl.TARGET_MIN / 60, line=dict(color=MUTED, dash="dash"))
-    style(fig, 280).update_layout(barmode="stack", title="Moyenne par jour, mois par mois (tout l'historique)", hovermode="x unified")
+    style(fig, 300).update_layout(barmode="stack", title="Moyenne par jour, mois par mois (tout l'historique)", yaxis=dict(ticksuffix=" h"), hovermode="x unified")
     fig.update_xaxes(tickformat="%b %y")
-    c1.plotly_chart(fig, width="stretch")
-    c2.markdown("**Par année**")
-    c2.dataframe(pd.DataFrame({"Année": yr["key"].astype(str), "Par jour": yr["total"].map(dur), "Nuit": yr["main"].map(dur),
+    c2.plotly_chart(fig, width="stretch")
+    st.markdown("**Par année**")
+    st.dataframe(pd.DataFrame({"Année": yr["key"].astype(str), "Par jour": yr["total"].map(dur), "Nuit": yr["main"].map(dur),
                                "Siestes": yr["naps"].map(dur), "Score": yr["score"].round(0), "Nuits": yr["nights"]}),
                  hide_index=True, width="stretch")
 

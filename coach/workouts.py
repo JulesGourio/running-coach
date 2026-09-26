@@ -10,6 +10,7 @@ from coach.verdict import fpace
 
 CATEGORIES = ["Fractionné court", "Fractionné long", "Seuil", "Allure spécifique 10 km", "Pyramides et mixtes", "Côtes"]
 WALK = (700, 1000)
+REC_PACE = {False: 415, True: 720}  # s/km: jogged (~8,7 km/h) or walked (~5 km/h) recovery
 
 
 @dataclass(frozen=True)
@@ -159,8 +160,11 @@ def describe(w: Workout, vma: float, threshold_pace: float, goal_pace: float, wa
     return f"20 min d'échauffement, {what} {inten}{r}, 10 min de retour au calme. {w.objective}".strip()
 
 
-def summary(w: Workout, vma: float, threshold_pace: float, goal_pace: float, easy: tuple[int, int]) -> dict:
-    """Per-rep time or distance, work volume, total distance and duration (warm-up and cool-down included)."""
+def summary(w: Workout, vma: float, threshold_pace: float, goal_pace: float, easy: tuple[int, int], walk: bool = False) -> dict:
+    """Per-rep time or distance, recovery, work volume, total distance and duration (warm-up and cool-down
+    included). A walked recovery covers about 60 % of the ground of a jogged one in the same time."""
+    rp = REC_PACE[walk]
+    how = "marchée" if walk else "trottée"
     if w.ladder:
         lo, hi = round(1000 / (vma * max(b for _, _, b, _ in w.ladder) / 100)), round(1000 / (vma * min(a for _, a, _, _ in w.ladder) / 100))
     else:
@@ -172,18 +176,24 @@ def summary(w: Workout, vma: float, threshold_pace: float, goal_pace: float, eas
         work_s = sum(m * 1000 / (vma * (a + b) / 200) / 1000 for m, a, b, _ in w.ladder)
         rec_s = sum(r for *_, r in w.ladder)
         per = ""
+        rec_txt = f"récup {how} entre chaque (~{rec_s * 1000 / rp:.0f} m au total)"
     else:
         per_s = w.value if w.unit == "s" else w.value * mid / 1000
         per_m = w.value if w.unit == "m" else w.value / mid * 1000
         n = w.reps * w.sets
         work_s, work_m = per_s * n, per_m * n
-        rec_one = w.rec if w.rec_unit == "s" else w.rec * 415 / 1000
+        rec_one = w.rec if w.rec_unit == "s" else w.rec * rp / 1000
         rec_s = rec_one * (w.reps - 1) * w.sets + w.set_rec_s * (w.sets - 1)
         per = (f"{fpace(per_s)} par répétition" if w.unit == "m" else f"~{per_m:.0f} m par répétition")
-    rec_m = rec_s * 1000 / 415
+        if w.reps > 1 and w.rec:
+            rec_txt = (f"récup {fpace(w.rec)} {how} (~{w.rec * 1000 / rp:.0f} m)" if w.rec_unit == "s"
+                       else f"récup {w.rec:g} m {how} (~{fpace(rec_one)})")
+        else:
+            rec_txt = "effort continu" if w.reps == 1 else f"récup {how}"
+    rec_m = rec_s * 1000 / rp
     total_s = 1200 + 600 + work_s + rec_s
     total_m = (1800 * easy_speed) + work_m + rec_m
-    return {"pace": (lo, hi), "per_rep": per, "work_m": work_m, "work_s": work_s, "total_m": total_m, "total_s": total_s}
+    return {"pace": (lo, hi), "per_rep": per, "rec": rec_txt, "rec_s": rec_s, "rec_m": rec_m, "work_m": work_m, "work_s": work_s, "total_m": total_m, "total_s": total_s}
 
 
 def customise(w: Workout, **changes) -> Workout:

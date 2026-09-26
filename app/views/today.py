@@ -136,7 +136,7 @@ with st.container(horizontal=True):
     st.metric("Fatigue", fnum(now.get("atl"), 0), border=True, chart_data=model_tail["atl"].tolist(), chart_type="line",
               help="Moyenne pondérée de la charge sur 7 jours.")
     st.metric("Fraîcheur", fnum(now.get("tsb"), 0), border=True, chart_data=model_tail["tsb"].tolist(), chart_type="line",
-              help="Forme moins fatigue, la veille. Sous -20 : fatigue élevée. Entre +5 et +15 : frais pour une course.")
+              help="Forme moins fatigue, la veille. Entre -10 et -30 : entraînement productif. Sous -30 : fatigue élevée. Entre +5 et +15 : frais pour une course.")
     st.metric("Ratio de charge (COROS)" if coros_load else "Ratio aigu/chronique", fnum(acwr, 2), border=True,
               delta=("zone optimale" if acwr is not None and 0.8 <= acwr <= 1.3 else "à surveiller" if acwr and acwr > 1.3 else "charge basse")
               if acwr is not None and acwr == acwr else None,

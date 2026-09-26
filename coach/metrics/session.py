@@ -25,6 +25,14 @@ def minetti_factor(grade: np.ndarray) -> np.ndarray:
     return cost / 3.6
 
 
+def effort_factor(grade: np.ndarray) -> np.ndarray:
+    """Cost of running on a slope relative to flat ground, fitted on real runners' heart rate (the curve behind
+    Strava's grade-adjusted pace): +40 % at +10 %, about -12 % at -10 %, and steep descents cost again (braking).
+    Minetti's lab curve overstates what a steep descent gives back, so it isn't used for the effort pace."""
+    g = np.clip(np.asarray(grade, dtype=float) * 100, -20, 40)
+    return 1 + 0.0275 * g + 0.0015 * g**2
+
+
 def grade_series(df: pd.DataFrame) -> np.ndarray:
     if df["altitude"].isna().all():
         return np.zeros(len(df))
@@ -206,7 +214,7 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
     t = df["elapsed"].to_numpy()
     dist = df["distance"].to_numpy()
     grade = grade_series(df)
-    gap_speed = speed * minetti_factor(grade)
+    gap_speed = speed * effort_factor(grade)
     moving = np.maximum(speed, gap_speed) > MOVING_SPEED
 
     moving_s = float(moving.sum())
@@ -262,7 +270,8 @@ def compute_session_metrics(df: pd.DataFrame, a: Athlete, session: dict | None =
         "avg_pace": 1000 / avg_speed if avg_speed else None,
         "ngp_pace": 1000 / ngp if ngp else None,
         "avg_hr": avg_hr,
-        "max_hr": float(np.nanmax(hr)) if has_hr else None,
+        # max over 5 s: a one-second optical spike isn't a max heart rate
+        "max_hr": float(pd.Series(hr).rolling(5, min_periods=3).median().max()) if has_hr else None,
         "hr_p99": float(np.nanpercentile(hr, 99)) if has_hr else None,
         "intensity_factor": intensity,
         "rtss": rtss,
@@ -297,7 +306,7 @@ def km_splits(df: pd.DataFrame, grade: np.ndarray, moving: np.ndarray) -> list[d
     if not len(dist) or dist[-1] < 500:
         return []
     speed = df["speed"].fillna(0).to_numpy()
-    gap = speed * minetti_factor(grade)
+    gap = speed * effort_factor(grade)
     alt = df["altitude"].interpolate(limit_direction="both").rolling(15, center=True, min_periods=1).mean().diff().fillna(0).to_numpy()         if df["altitude"].notna().any() else np.zeros(len(df))
     hr = df["hr"].to_numpy(dtype=float)
     km = (dist // 1000).astype(int)

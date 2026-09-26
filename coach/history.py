@@ -32,6 +32,10 @@ def frame(db: DB, sports: str = "run") -> pd.DataFrame:
     return df.sort_values("date")
 
 
+def _road(df: pd.DataFrame) -> pd.DataFrame:
+    return df[df["sport_type"].isin([100, 101, 103]) & (df["distance_km"] > 0)] if "sport_type" in df else df
+
+
 def window(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
     return df[(df["date"].dt.date >= start) & (df["date"].dt.date <= end)]
 
@@ -40,8 +44,10 @@ def totals(df: pd.DataFrame, start: date, end: date) -> dict:
     w = window(df, start, end)
     weeks = max(1.0, ((end - start).days + 1) / 7)
     km, secs = w["distance_km"].sum(), w["duration_s"].fillna(0).sum()
+    road = _road(w)  # a mean pace only makes sense over road runs: trails, hikes and rides would skew it
+    rkm, rsecs = road["distance_km"].sum(), road["duration_s"].fillna(0).sum()
     return {"km": float(km), "sessions": int(len(w)), "hours": float(secs / 3600), "km_week": float(km / weeks),
-            "sessions_week": float(len(w) / weeks), "pace": float(secs / km) if km else None,
+            "sessions_week": float(len(w) / weeks), "pace": float(rsecs / rkm) if rkm else None,
             "longest": w.loc[w["distance_km"].idxmax()].to_dict() if len(w) else None}
 
 
@@ -61,7 +67,8 @@ def per_year(df: pd.DataFrame) -> pd.DataFrame:
     g = df.groupby(df["date"].dt.year)
     out = g.agg(km=("distance_km", "sum"), sessions=("label_id", "count"), hours=("hours", "sum"),
                 longest=("distance_km", "max"), secs=("duration_s", "sum")).reset_index().rename(columns={"date": "year"})
-    out["pace"] = out["secs"] / out["km"]
+    road = _road(df).groupby(_road(df)["date"].dt.year)[["duration_s", "distance_km"]].sum()
+    out["pace"] = out["year"].map(lambda y: road.loc[y, "duration_s"] / road.loc[y, "distance_km"] if y in road.index and road.loc[y, "distance_km"] else None)
     return out
 
 

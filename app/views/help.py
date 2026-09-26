@@ -55,6 +55,15 @@ cibles, régularité, baisse de régime). Pas de note hors plan.
 **Carte** colorée par l'allure (rouge = rapide), **profil d'altitude**, allure et FC avec les zones en bandes de
 couleur, tours, meilleurs efforts, et **toutes tes séances du même type** depuis le début pour voir ta progression.
 Les autres sports (randonnée, vélo…) ont leur propre fiche : distance, D+, vitesse, FC, calories, carte.
+
+**Trail, randonnée et sorties vallonnées** (≥ 15 m de D+ par km) : section **Relief et effort**.
+- **Allure d'effort** : l'allure équivalente sur le plat pour le même effort (+40 % de coût à +10 % de pente, environ
+  -12 % à -10 %, et les descentes raides coûtent à nouveau). Elle permet de comparer une sortie en montagne à une
+  sortie plate.
+- **Km-effort** = km + D+/100 ; **vitesse ascensionnelle** = mètres gagnés par heure de montée.
+- Allure ou vitesse **km par km** sur le profil, **allure selon la pente** et temps passé dans chaque pente,
+  tableau **kilomètre par kilomètre** (D+, D-, pente, FC).
+- **Temps en mouvement** : la marche en montée compte comme du mouvement, seuls les arrêts sont retirés.
 """)
 
 with tabs[3]:
@@ -63,7 +72,7 @@ with tabs[3]:
 - **Charge d'une séance** : intensité × durée, 100 = une heure courue à ton allure seuil. Pour les autres sports et
   les séances sans détail : estimée d'après la FC et la durée (100 par heure à ta FC seuil).
 - **Forme** : moyenne de la charge sur ~6 semaines (ce que ton corps a assimilé). **Fatigue** : sur 7 jours.
-  **Fraîcheur** = forme − fatigue ; entre +5 et +15 : frais pour une course ; sous −20 : fatigue élevée.
+  **Fraîcheur** = forme − fatigue ; entre −10 et −30 : entraînement productif ; sous −30 : fatigue élevée ; entre +5 et +15 : frais pour une course.
 - **Ratio de charge** (COROS, tous sports) : 7 derniers jours / 4 dernières semaines. Zone utile 0,8-1,3 ;
   au-dessus de 1,5 plusieurs jours, le risque de blessure monte.
 - **Répartition facile / tempo / intense** : repère ~80 % du temps en facile.
@@ -132,7 +141,8 @@ with tabs[8]:
 ### Séances types
 Toutes les séances de fractionné par catégorie : fractionné court, fractionné long, seuil, allure spécifique,
 pyramides et mixtes, côtes. Allures calculées sur ta VMA (modifiable en haut), ton seuil et ton allure objectif ;
-tout se personnalise (répétitions, distance ou durée, % de VMA, récupération trottée ou marchée, séries).
+tout se personnalise (répétitions, distance ou durée, % de VMA, récupération, séries). Récupération **marchée** : même
+durée, mais ~5 km/h au lieu de ~8,7 km/h trotté, donc moins de distance au total ; la récup de chaque carte l'indique.
 **Ajouter au plan** met la séance en attente sur le jour choisi ; l'envoi se fait depuis la page Plan.
 """)
 

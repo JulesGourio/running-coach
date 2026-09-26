@@ -18,6 +18,12 @@ def frame(rows: list[dict]) -> pd.DataFrame:
         return df
     df["date"] = pd.to_datetime(df["date"])
     df["night"] = df["date"] - pd.Timedelta(days=1)  # rows are dated by the wake-up morning
+    # The long-history summaries only give bed and wake times: rebuild the durations from them.
+    window = (pd.to_datetime(df["waketime"]) - pd.to_datetime(df["bedtime"])).dt.total_seconds() / 60
+    window = window.where((window > 60) & (window < 16 * 60))
+    df["main_period_min"] = df["main_period_min"].fillna(window)
+    df["main_min"] = df["main_min"].fillna(window - df["awake_min"].fillna(window * df["awake_pct"].fillna(0) / 100))
+    df["total_min"] = df["total_min"].fillna(df["main_min"] + df["naps_min"].fillna(0))
     for k in ("deep", "light", "rem", "awake"):
         df[f"{k}_min"] = df["main_period_min"].fillna(df["main_min"]) * df[f"{k}_pct"] / 100
     df["naps_min"] = df["naps_min"].fillna(0)

@@ -11,7 +11,7 @@ import httpx
 import numpy as np
 import pandas as pd
 
-from coach.metrics.session import minetti_factor
+from coach.metrics.session import effort_factor
 
 FORECAST = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
@@ -69,7 +69,7 @@ def km_profile(course: pd.DataFrame, distance_m: float) -> pd.DataFrame:
         x = np.r_[a, seg["dist"].to_numpy(), b]
         y = np.r_[alt_a, seg["alt"].to_numpy(), alt_b]
         grades = np.diff(y) / np.maximum(np.diff(x), 1)
-        cost = float(np.average(minetti_factor(np.clip(grades, -0.3, 0.3)), weights=np.maximum(np.diff(x), 1e-6)))
+        cost = float(np.average(effort_factor(np.clip(grades, -0.3, 0.3)), weights=np.maximum(np.diff(x), 1e-6)))
         bearing = None
         if seg["lat"].notna().sum() >= 2:
             la1, lo1, la2, lo2 = seg["lat"].dropna().iloc[0], seg["lon"].dropna().iloc[0], seg["lat"].dropna().iloc[-1], seg["lon"].dropna().iloc[-1]

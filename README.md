@@ -135,7 +135,16 @@ Récupération, Plan, Séances types, Jour J, **Aide** (récapitulatif de chaque
   en hausse, VFC basse, ratio de charge, dette de sommeil, hausse brutale du kilométrage, qualité manquée.
 - **Bilan hebdo** (`coach/report.py`) généré le lundi et archivé.
 - **Prédictions toutes distances** (5 km au marathon) et suivi des chances A/B semaine après semaine.
-- **Sommeil** en trois onglets : une nuit à la fois (navigation), statistiques, VFC et FC de repos.
+- **Sommeil** en trois onglets :
+  - une nuit à la fois (frise sur 24 h, phases comparées aux zones normales) ;
+  - statistiques (durée avec moyenne sur 7 jours, part de profond et de paradoxal, fenêtre coucher → lever) ;
+  - VFC et FC de repos.
+  Pour les nuits de l'historique long, COROS ne donne que les heures de coucher et de lever : la durée en est déduite.
+- **Trail et randonnée** (`coach/metrics/session.py`) :
+  - le temps en mouvement compte la marche en montée : un arrêt, c'est une vitesse d'effort, pente comprise, sous 0,8 m/s ;
+  - allure d'effort, sur une courbe de coût de la pente de type Strava plutôt que Minetti, qui surestime le gain en descente ;
+  - D-, km-effort, vitesse ascensionnelle, découpage km par km (`splits`), allure par classe de pente (`grade_bins`).
+- **Historique** : l'allure moyenne ne porte que sur la route, la piste et le tapis.
 - **Jour J** (`coach/raceplan.py`) : allure km par km selon le profil (GPX, une sortie ou plat) et la météo
   Open-Meteo (chaleur, vent), temps de passage, envoi sur la montre comme séance du jour de course.
 

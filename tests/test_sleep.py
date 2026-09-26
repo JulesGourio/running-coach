@@ -29,3 +29,11 @@ def test_averages_by_period():
     w = sl.by_period(df, "weekday")
     assert w["nights"].sum() == 4 and set(w.columns) >= {"total", "naps", "nap_days"}
     assert sl.by_period(df, "year")["key"].tolist() == [2026]
+
+
+def test_frame_rebuilds_durations_from_bed_and_wake():
+    from coach.metrics import sleep as sl
+    df = sl.frame([{"date": "2026-07-05", "score": 70.0, "total_min": None, "main_min": None, "main_period_min": None,
+                    "deep_pct": 12.0, "light_pct": 67.0, "rem_pct": 19.0, "awake_pct": 2.0, "awake_min": 8.0, "awake_count": None,
+                    "bedtime": "2026-07-05 00:20", "waketime": "2026-07-05 08:10", "naps_min": 30.0, "naps": []}])
+    assert df.loc[0, "main_min"] == 470 - 8 and df.loc[0, "total_min"] == 462 + 30
