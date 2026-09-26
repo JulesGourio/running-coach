@@ -177,7 +177,7 @@ def vma_from_hr_fits(fits: list[tuple[date, dict]], hr_max: float, end: date, wi
 TEST_KINDS = {
     "6min": "Test de 6 minutes (distance parcourue)",
     "effort": "Effort chronométré à fond (distance et temps, ex. 1500 m, 3000 m, 5 km)",
-    "manuel": "VMA connue (mesurée ailleurs, en km/h)",
+    "manuel": "VMA d'un test progressif (VAMEVAL, navette…) : gardée pour info, pas utilisée pour les allures",
 }
 
 

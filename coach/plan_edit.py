@@ -466,7 +466,7 @@ def suggestions(db: DB, s: Settings) -> list[dict]:
                 changes.append(make_change(d, new, f"Allures VMA recalées sur {_k(vma['retenue'])} km/h"))
         if changes:
             faster = vma["retenue"] > implied
-            out.append({"title": f"Recaler les allures VMA du plan sur ta VMA retenue ({_k(vma['retenue'])} km/h)",
+            out.append({"title": f"Recaler les allures VMA du plan sur ta VMA d'entraînement ({_k(vma['retenue'])} km/h)",
                         "why": f"Les séances VMA du plan correspondent à {_k(implied)} km/h ; elles deviennent "
                                f"{'plus rapides' if faster else 'plus lentes'} d'environ {abs(1 - ratio) * 100:.0f} %. "
                                f"Le seuil et l'allure objectif ne bougent pas ({len(changes)} séances).",

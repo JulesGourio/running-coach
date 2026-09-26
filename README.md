@@ -80,9 +80,12 @@ directement dans ton calendrier.
 - **Ratio charge aiguë / chronique**, monotonie et contrainte (Foster).
 - **Répartition facile / tempo / intense** par semaine (repère : environ 80 % facile).
 - **Allure à FC fixe** sur les footings : l'indicateur le plus fiable de progrès aérobie.
-- **VMA retenue**, dans cet ordre :
-  1. un **test** récent (moins de 10 semaines) saisi dans la page Progression : 6 minutes, effort chronométré à
-     fond (1500 m, 3000 m…) ou valeur connue ;
+- **VMA d'entraînement** (celle que tu tiens en fractionné, base de toutes les allures et des prédictions), dans cet ordre :
+  1. un **test de terrain** récent (moins de 10 semaines) saisi dans la page Progression : 6 minutes ou effort
+     chronométré à fond (1500 m, 3000 m…). Une VMA de test progressif (VAMEVAL, navette) saisie à la main est
+     affichée pour info mais pas utilisée : ces tests finissent sur un sprint et, chez Jules (grosse réserve de
+     vitesse, chute rapide avec la durée), surestiment de ~6-10 % ce qui se tient en 1 km (VAMEVAL ~18 en 2024,
+     1000 m toujours vers 3:55-4:00, soit ~15,2 km/h) ;
   2. sinon la **relation FC-vitesse** de la meilleure séance de fractionné des 6 dernières semaines : échauffement
      et fin de chaque répétition (allure corrigée du dénivelé) s'alignent presque en ligne droite ; prolongée
      jusqu'à 97 % de la FC max, elle donne la vitesse à VO2max même si les répétitions n'étaient pas à fond
@@ -90,7 +93,7 @@ directement dans ton calendrier.
   3. jamais en dessous des **allures courues** en fractionné (chaque répétition ramenée à la VMA selon sa durée :
      400 m ≈ 105 %, 1000 m ≈ 98 % ; moyenne des deux meilleures séances).
   Affichées en recoupement : allure seuil COROS (seuil ≈ 87 % de VMA) et VO2max COROS (≈ 3,5 × VMA, non retenue).
-- **10 km estimé** : médiane de trois estimations (VMA retenue, prédiction COROS, allure seuil COROS ; le test seul
+- **10 km estimé** : médiane de trois estimations (VMA d'entraînement, prédiction COROS, allure seuil COROS ; le test seul
   s'il existe), la VMA étant convertie en temps de course selon la part tenable sur la durée (~90 % sur 40 min).
   Il n'y a ni course ni effort continu 5/10 km dans les données : Riegel, VDOT et vitesse critique sur les
   « meilleurs efforts » donnaient des résultats faux et ne sont plus utilisés.
@@ -165,7 +168,7 @@ réalisé et prévu semaine par semaine, et chaque jour montre la séance réali
 ## Séances types
 
 La page **Séances types** regroupe les séances de fractionné par catégorie (fractionné court, fractionné long,
-seuil, allure spécifique 10 km, pyramides et mixtes, côtes), avec allures calculées sur la VMA retenue, l'allure
+seuil, allure spécifique 10 km, pyramides et mixtes, côtes), avec allures calculées sur la VMA d'entraînement, l'allure
 seuil et l'allure objectif. Chaque séance se personnalise (répétitions, distance ou durée, % de VMA ou écart
 d'allure, récupération trottée ou marchée, séries) et affiche le temps par répétition, le volume d'effort, la
 distance et la durée totales. Un clic l'ajoute à un jour du plan (mise en attente, envoi depuis la page Plan).
@@ -228,9 +231,13 @@ est exclu de git.
 
 - 10 km le dimanche 13 décembre 2026. Objectif A : sub-40:00. Objectif B : 41:00 à 41:30.
 - Forme au 25 septembre 2026 : VO2max 60, allure seuil 4:22/km, prédiction COROS 43:26,
-  VMA retenue 16,0 km/h (relation FC-vitesse du 6 × 1 km du 24/09, fourchette 15,5-16,7 ; allures de
+  VMA d'entraînement 16,0 km/h (relation FC-vitesse du 6 × 1 km du 24/09, fourchette 15,5-16,7 ; allures de
   fractionné 15,8 ; seuil COROS 15,8 ; VO2max COROS 17,1), 10 km estimé 42:05, projection au 13 décembre
   40:14 (fourchette 37:56-42:33). Test VMA de 6 minutes proposé pour trancher.
+- 26 septembre 2026 : allures VMA du plan recalées sur les répétitions réellement tenues (1000-1200 m à
+  3:48-3:54 puis 3:45-3:51 en novembre, 800 m à 3:40-3:46, 400 m à 3:26-3:32), allure 10 km des répétitions
+  4:04-4:10 tant qu'une séance ne prouve pas mieux. Le recalage sur 17 km/h appliqué le matin même rendait
+  les 1000 m à 3:34 : jamais tenus, même en 2024.
 - Plan de 11 semaines dans le calendrier COROS (28 septembre → 13 décembre), réécrit le 25 septembre à la
   demande de Jules (le premier jugé trop facile ; il a déjà tenu cette charge pour un marathon) :
   5 séances par semaine dont 3 de qualité (VMA le mardi, seuil ou allure 10 km le jeudi, sortie longue avec

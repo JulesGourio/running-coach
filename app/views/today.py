@@ -72,11 +72,12 @@ with st.container(horizontal=True):
         st.metric("Chances d'y arriver", f"A {probs.get('A', 0):.0%} · B {probs.get('B', 0):.0%}", border=True,
                   help="Probabilité que la projection passe sous chaque objectif, compte tenu de la fourchette.")
     if vma.get("retenue"):
-        src = {"test": "test", "manuel": "fixée par toi", "cardio": "FC-vitesse", "fractionnes": "allures", "seuil": "seuil COROS"}[vma["source"]]
-        st.metric("VMA retenue", f"{fnum(vma['retenue'] * 3.6, 1)} km/h", border=True,
+        src = {"test": "test", "cardio": "FC-vitesse", "fractionnes": "allures", "seuil": "seuil COROS"}[vma["source"]]
+        st.metric("VMA d'entraînement", f"{fnum(vma['retenue'] * 3.6, 1)} km/h", border=True,
                   delta=f"{fpace(1000 / vma['retenue'])}/km · {src}", delta_color="off",
-                  help="Vitesse maximale aérobie. Un test récent prime ; sinon la relation FC-vitesse de ta meilleure "
-                       "séance de fractionné (ou, à défaut, les allures courues). Détail et saisie d'un test : page Progression.")
+                  help="La VMA que tu tiens en fractionné, base de toutes les allures. Un test de terrain récent (6 min, effort "
+                       "chronométré) prime ; sinon la relation FC-vitesse de ta meilleure séance, jamais sous les allures courues. "
+                       "Une VMA de test progressif (VAMEVAL) est affichée pour info seulement. Détail : page Progression.")
 
 with st.expander("Comment ces chiffres sont calculés", icon=":material/calculate:"):
     rows = [{"Méthode": k, "10 km": fdur(v), "Allure": f"{fpace(v / 10)}/km"} for k, v in pr["predictions"].items()]

@@ -30,7 +30,7 @@ def parse_pace(txt: str, default: float) -> float:
 with st.container(border=True):
     c1, c2, c3, c4 = st.columns(4)
     vma_kmh = c1.number_input("VMA (km/h)", 12.0, 24.0, round(vma_ret * 3.6, 1), 0.1, key="lib-vma",
-                              help="Par défaut ta VMA retenue (page Progression). Change-la pour voir les allures d'une autre VMA.")
+                              help="Par défaut ta VMA d'entraînement (page Progression). Change-la pour voir les allures d'une autre VMA.")
     goal = parse_pace(c2.text_input("Allure objectif 10 km", fpace((s.goal_a or 2400) / 10), key="lib-goal"), (s.goal_a or 2400) / 10)
     thr = parse_pace(c3.text_input("Allure seuil", fpace(a.threshold_pace), key="lib-thr"), a.threshold_pace)
     walk = c4.segmented_control("Récupération", ["trottée", "marchée"], default="trottée", key="lib-walk") == "marchée"

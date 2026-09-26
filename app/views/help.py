@@ -29,7 +29,7 @@ with tabs[1]:
 ### Aujourd'hui
 - **Alertes** en haut de page, avec un conseil : voir l'onglet *Alertes et bilan*.
 - **Bilan de la semaine** (ouvert le lundi) : réalisé contre prévu, séances clés, sommeil, récupération, ajustements.
-- **10 km estimé, projection au jour J, chances A/B, VMA retenue** : voir *Progression*.
+- **10 km estimé, projection au jour J, chances A/B, VMA d'entraînement** : voir *Progression*.
 - **Forme du jour** (0-100) : VFC et FC de repos comparées à tes 4 dernières semaines, sommeil, fraîcheur.
   Vert ≥ 70, orange 50-69, rouge < 50.
 - **Séance du jour** du plan, avec un conseil selon la forme.
@@ -81,15 +81,19 @@ with tabs[3]:
 with tabs[4]:
     st.markdown("""
 ### Progression
-**VMA retenue**, dans cet ordre :
-1. un **test** saisi (6 minutes, effort chronométré à fond, ou valeur que tu fixes) : il prime 10 semaines ;
+**VMA d'entraînement** : celle que tu tiens en fractionné, base de toutes les allures. Dans cet ordre :
+1. un **test de terrain** saisi (6 minutes, ou effort chronométré à fond) : il prime 10 semaines ;
 2. sinon la **relation FC-vitesse** de ta meilleure séance de fractionné (échauffement + fin de chaque répétition, même
    jour, mêmes conditions), prolongée jusqu'à 97 % de ta FC max ;
 3. jamais en dessous des **allures courues** en fractionné (chaque répétition ramenée à la VMA selon sa durée).
 
 Affichés en recoupement : allure seuil COROS (seuil ≈ 87 % de VMA) et VO2max COROS (≈ 3,5 × VMA).
 
-**10 km estimé** : médiane de la VMA retenue (convertie avec ~90 % de VMA tenus sur 40 min), de la prédiction
+**VMA de test progressif** (VAMEVAL, navette) : gardée pour info, pas utilisée. Ces tests finissent sur un sprint et
+mesurent une vitesse de pointe. Chez un coureur à grosse réserve de vitesse, elle surestime nettement ce qui se tient
+sur des répétitions de 1 km : les séances calculées dessus seraient trop dures.
+
+**10 km estimé** : médiane de la VMA d'entraînement (convertie avec ~90 % de VMA tenus sur 40 min), de la prédiction
 COROS et de l'allure seuil. **Toutes les distances** : même principe du 5 km au marathon, avec ton record en repère.
 
 **Projection au jour J** : niveau actuel + un gain par semaine (ta tendance si elle est nette, sinon 0,4 %),
@@ -129,7 +133,7 @@ with tabs[7]:
 - **Modifier** une séance : volume, allures, remplacer par un modèle, échanger deux jours. Ou ajuster plusieurs séances
   d'un coup (une semaine ou tout le plan).
 - **Suggestions** : alléger quand la forme ou la charge l'exigent, reprogrammer une séance manquée, programmer un test
-  VMA, recaler les allures VMA sur ta VMA retenue.
+  VMA, recaler les allures VMA sur ta VMA d'entraînement.
 - Chaque modification est **mise en attente** (avant/après), puis **envoyée sur COROS** après confirmation. Les jours
   passés ou réalisés ne changent jamais.
 - **Nouveau plan** : générateur (5 km, 10 km, semi, marathon) ; il reste en brouillon et se crée dans COROS quand il

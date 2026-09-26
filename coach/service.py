@@ -155,14 +155,16 @@ def progress(db: DB, s: Settings) -> dict:
     fit = [f for f in db.fitness() if f.get("vo2max") or f.get("p10")]
     last_fit = fit[-1] if fit else {}
     seuil = (1000 / a.threshold_pace) / prog.THRESHOLD_VMA_FRACTION if a.threshold_pace else None
-    test = latest_vma_test(db, today)
+    test = latest_vma_test(db, today, functional=True)
 
     def retained(end: date) -> tuple[float | None, str, dict]:
-        """Best available VMA at a date: a recent field test, else the heart-rate line of the best interval session
-        (never below the paces actually run), else the paces run, else COROS threshold pace."""
-        t = latest_vma_test(db, end)
+        """Training VMA at a date, the one every pace is computed from: a recent functional field test (6 minutes
+        or a timed effort), else the heart-rate line of the best interval session (never below the paces actually
+        run), else the paces run, else COROS threshold pace. A value typed in (a ramp test like the VAMEVAL) is
+        shown but not used: a ramp test ends on a sprint and overstates what can be held in 1 km reps."""
+        t = latest_vma_test(db, end, functional=True)
         if t:
-            return t["vma"], "manuel" if t["kind"] == "manuel" else "test", {}
+            return t["vma"], "test", {}
         paces = prog.estimate_vma(rep_sessions, a.threshold_pace, a.hr_max, end)
         cardio = prog.vma_from_hr_fits(hr_fits, a.hr_max, end)
         detail = {"paces": paces, "cardio": cardio}
@@ -176,7 +178,7 @@ def progress(db: DB, s: Settings) -> dict:
     paces_now, cardio_now = det.get("paces") or prog.estimate_vma(rep_sessions, a.threshold_pace, a.hr_max, today), \
         det.get("cardio") or prog.vma_from_hr_fits(hr_fits, a.hr_max, today)
     vma = {
-        "retenue": v_ret, "source": source, "test": test,
+        "retenue": v_ret, "source": source, "test": test, "peak": latest_vma_test(db, today, kinds=("manuel",)),
         "fractionnes": paces_now["vma"] if paces_now else None,
         "fractionnes_seances": paces_now["sessions"] if paces_now else [],
         "cardio": cardio_now["vma"] if cardio_now else None,
@@ -187,7 +189,7 @@ def progress(db: DB, s: Settings) -> dict:
     }
     preds = {}
     if v_ret:
-        preds[f"VMA retenue ({VMA_SOURCES[source]})"] = prog.predict_from_vma(v_ret, D)
+        preds[f"VMA d'entraînement ({VMA_SOURCES[source]})"] = prog.predict_from_vma(v_ret, D)
     # COROS and threshold pace always stay in: converting a VMA to a 10 km time assumes an endurance level (~90 %
     # of VMA held for 40 min) that isn't measured, so no single VMA should decide the prediction alone.
     if last_fit.get("p10"):
@@ -230,7 +232,7 @@ def progress(db: DB, s: Settings) -> dict:
             "prediction_series": series, "projection": proj, "probabilities": probs}
 
 
-VMA_SOURCES = {"test": "test", "manuel": "fixée par toi", "cardio": "FC-vitesse", "fractionnes": "allures des fractionnés", "seuil": "seuil COROS"}
+VMA_SOURCES = {"test": "test", "cardio": "FC-vitesse", "fractionnes": "allures des fractionnés", "seuil": "seuil COROS"}
 TEST_VALID_DAYS = 70
 
 
@@ -238,9 +240,12 @@ def vma_tests(db: DB) -> list[dict]:
     return json.loads(db.get_meta("vma_tests") or "[]")
 
 
-def latest_vma_test(db: DB, end: date) -> dict | None:
-    """Most recent field test done before `end` and less than 10 weeks old."""
-    ok = [t for t in vma_tests(db) if 0 <= (end - date.fromisoformat(t["date"])).days < TEST_VALID_DAYS]
+def latest_vma_test(db: DB, end: date, functional: bool = False, kinds: tuple[str, ...] | None = None) -> dict | None:
+    """Most recent field test done before `end` and less than 10 weeks old (`functional`: 6 minutes or timed
+    effort only; a typed-in ramp-test value is kept apart). Typed-in values don't expire."""
+    kinds = ("6min", "effort") if functional else kinds
+    ok = [t for t in vma_tests(db) if (kinds is None or t["kind"] in kinds)
+          and 0 <= (end - date.fromisoformat(t["date"])).days < (10 ** 5 if t["kind"] == "manuel" else TEST_VALID_DAYS)]
     return max(ok, key=lambda t: t["date"]) if ok else None
 
 
@@ -268,7 +273,7 @@ def predictions_all(db: DB, s: Settings, pr: dict | None = None) -> list[dict]:
     for name, (dist, key) in RACE_DISTANCES.items():
         m = {}
         if vma.get("retenue"):
-            m["VMA retenue"] = prog.predict_from_vma(vma["retenue"], dist)
+            m["VMA d'entraînement"] = prog.predict_from_vma(vma["retenue"], dist)
         if vma.get("seuil"):
             m["Seuil COROS"] = prog.predict_from_vma(vma["seuil"], dist)
         if fit.get(key):

@@ -41,8 +41,10 @@ expose les analyses calculées à partir des fichiers FIT : `resume`, `seances`,
 `synchroniser`. Pour un bilan de semaine, commence par `bilan_semaine` et `alertes`.
 
 Le type de chaque séance vient de ce qui a été couru (tours de la montre sinon flux GPS), pas du plan ;
-la note sur 10 n'existe que pour une séance prévue (respect du plan). VMA : un test saisi prime, sinon la
-relation FC-vitesse, jamais sous les allures courues (voir README).
+la note sur 10 n'existe que pour une séance prévue (respect du plan). VMA d'entraînement : un test de terrain
+(6 min, effort chronométré) prime, sinon la relation FC-vitesse, jamais sous les allures courues. Une VMA de
+test progressif (VAMEVAL) n'est jamais utilisée pour les allures : elle surestime ce que Jules tient en
+fractionné (voir README).
 
 Pour juger une séance :
 1. Lis `analyse_seance` (métriques, répétitions contre la cible, constats automatiques, note sur 10).

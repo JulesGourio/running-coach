@@ -134,3 +134,15 @@ def test_swap_exchanges_two_days_rest_included():
     d2 = {"date": "2030-01-09", "day_no": 9, "courses": []}
     a, b = pe.swap(d1, d2)
     assert a["after"] == [pe.REST] and b["after"] == [vma]
+
+
+def test_typed_in_ramp_test_vma_is_not_used_for_paces(tmp_path, monkeypatch):
+    from coach import service
+    monkeypatch.setenv("COACH_DATA_DIR", str(tmp_path))
+    db = DB(tmp_path / "coach.db")
+    today = date.today()
+    service.add_vma_test(db, today.isoformat(), "manuel", 18 / 3.6, "VAMEVAL")
+    assert service.latest_vma_test(db, today, functional=True) is None
+    assert service.latest_vma_test(db, today + timedelta(days=400), kinds=("manuel",))["detail"] == "VAMEVAL"
+    service.add_vma_test(db, today.isoformat(), "6min", 16.5 / 3.6, "test 6 min")
+    assert service.latest_vma_test(db, today, functional=True)["kind"] == "6min"

@@ -15,28 +15,39 @@ pr = service.progress(db, s)
 a = pr["athlete"]
 vma, est, proj = pr["vma"], pr["estimate"], pr["projection"]
 kmh = lambda v: f"{fnum(v * 3.6, 1)} km/h" if v else "—"  # noqa: E731
-SOURCE_TXT = {"test": "ton test", "manuel": "la valeur que tu as fixée", "cardio": "la relation FC-vitesse de ta meilleure séance",
+SOURCE_TXT = {"test": "ton test", "cardio": "la relation FC-vitesse de ta meilleure séance",
               "fractionnes": "les allures de tes fractionnés", "seuil": "ton allure seuil COROS"}
 
 # ---- VMA ------------------------------------------------------------------------------------------------
 st.subheader("Ta VMA", divider="gray")
 c1, c2 = st.columns([1, 3], vertical_alignment="center")
 with c1:
-    st.metric("VMA retenue", kmh(vma.get("retenue")), border=True,
+    st.metric("VMA d'entraînement", kmh(vma.get("retenue")), border=True,
               delta=f"{fpace(1000 / vma['retenue'])}/km" if vma.get("retenue") else None, delta_color="off",
-              help="Celle qui sert aux prédictions et aux allures du plan.")
+              help="La VMA que tu tiens vraiment en fractionné. Elle sert à toutes les allures (plan, séances types, "
+                   "suggestions) et aux prédictions.")
 with c2:
     src = vma.get("source")
-    st.markdown(f"Retenue d'après **{SOURCE_TXT.get(src, src)}**.")
-    if src in ("test", "manuel"):
+    st.markdown(f"Calculée d'après **{SOURCE_TXT.get(src, src)}**.")
+    if src == "test":
         t = vma["test"]
         st.caption(f"Test du {fdate(t['date'])} ({t['detail']}). Il prime sur les estimations pendant 10 semaines.")
     else:
-        st.caption("Pas de test récent : c'est une estimation. Un test de 6 minutes la remplacerait "
-                   "(bouton plus bas, et proposé dans la page Plan).")
+        st.caption("Pas de test de terrain récent : c'est une estimation tirée de tes séances. Un test de 6 minutes "
+                   "la remplacerait (plus bas, et proposé dans la page Plan).")
+    if vma.get("peak") and vma.get("retenue"):
+        pk = vma["peak"]["vma"]
+        st.info(f"Ta VMA de test progressif ({kmh(pk)}, {vma['peak']['detail']}) n'est pas utilisée pour les allures : "
+                f"un test par paliers finit sur un sprint et mesure une vitesse de pointe. Tes répétitions de 1 km se courent "
+                f"vers {kmh(vma['retenue'] * 0.96)}, soit {vma['retenue'] * 0.96 / pk:.0%} de cette VMA de test, là où les tables "
+                "classiques supposent 95-98 %. Ta réserve de vitesse est grande (400 m en 1:00) mais ta vitesse chute vite "
+                "avec la durée : avec la VMA de test, les séances seraient trop dures.", icon=":material/info:")
 with st.container(horizontal=True):
     if vma.get("test"):
-        st.metric("Test", kmh(vma["test"]["vma"]), border=True, help=vma["test"]["detail"])
+        st.metric("Test de terrain", kmh(vma["test"]["vma"]), border=True, help=vma["test"]["detail"])
+    if vma.get("peak"):
+        st.metric("Test progressif (info)", kmh(vma["peak"]["vma"]), border=True,
+                  help=f"{vma['peak']['detail']}. Vitesse de pointe en fin de test : pas utilisée pour les allures.")
     rng = vma.get("cardio_range")
     st.metric("FC-vitesse", kmh(vma.get("cardio")), border=True,
               delta=f"{fnum(rng[0] * 3.6, 1)}–{fnum(rng[1] * 3.6, 1)} km/h" if rng else None, delta_color="off",
@@ -50,7 +61,7 @@ with st.container(horizontal=True):
     st.metric("Seuil COROS", kmh(vma.get("seuil")), border=True,
               help=f"Allure seuil COROS {fpace(a['threshold_pace'])}/km, le seuil se situant vers 87 % de VMA.")
     st.metric("VO2max COROS", kmh(vma.get("vo2max")), border=True,
-              help="VO2max de la montre / 3,5. Estimation de la montre, souvent optimiste : non utilisée pour la VMA retenue.")
+              help="VO2max de la montre / 3,5. Estimation de la montre, souvent optimiste : non utilisée pour la VMA d'entraînement.")
 
 with st.expander("Enregistrer un test de VMA", icon=":material/timer:"):
     kind = st.radio("Type de test", list(prog.TEST_KINDS), format_func=prog.TEST_KINDS.get, key="t-kind")
@@ -112,7 +123,7 @@ if series or proj:
     if pr["probabilities"]:
         p = pr["probabilities"]
         st.markdown(f"Chances d'atteindre l'objectif A : **{p.get('A', 0):.0%}** · l'objectif B : **{p.get('B', 0):.0%}**.")
-    st.caption("Courbe grise : 10 km déduit de la VMA retenue chaque semaine (sur les 6 semaines précédentes). "
+    st.caption("Courbe grise : 10 km déduit de la VMA d'entraînement chaque semaine (sur les 6 semaines précédentes). "
                "Zone bleue : projection au jour J si le plan est suivi, incertitude comprise.")
 preds = pr["predictions"]
 if preds:
