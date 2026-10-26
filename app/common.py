@@ -204,7 +204,7 @@ def sync_bar() -> None:
     c1.caption(f"Dernière synchro COROS : {last[:16].replace('T', ' à ')}" if last else "Pas encore synchronisé.")
     if c2.button("Synchroniser", icon=":material/sync:", width="stretch", key="sync-top",
                  help="Récupère séances, sommeil, récupération et plan des 3 dernières semaines depuis COROS."):
-        from coach.sources.coros_mcp import NeedsLogin, describe
+        from coach.sources.coros_base import NeedsLogin, describe
         from coach.sync import analyze, sync_mcp
         logs: list[str] = []
         with st.spinner("Récupération des données COROS…"):

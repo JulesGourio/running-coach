@@ -32,3 +32,4 @@ packages = ["coach"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = [".", "android/kit/python"]

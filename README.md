@@ -4,6 +4,13 @@ Coach de course à pied local : il récupère tes données COROS (fichiers FIT s
 sommeil, plan), calcule ce que COROS n'affiche pas, juge chaque séance par rapport au plan, et se branche
 à Claude Code pour que Claude lise ces analyses et rédige les verdicts.
 
+## Sur le téléphone
+
+L'appli Android **Carnet de course** fait tourner ce même moteur sur le téléphone, sans PC ni serveur :
+toutes les pages du dashboard, la synchro COROS chaque matin et des notifications. Installation et premier
+lancement : [`android/README.md`](android/README.md). Elle est construite avec un kit réutilisable pour les
+autres applis (`android/kit/KIT.md`).
+
 ## Installation (VS Code)
 
 Prérequis : [uv](https://docs.astral.sh/uv/) et Python 3.11 ou plus.
@@ -203,6 +210,9 @@ jamais modifiés. L'historique est gardé en local et consultable par Claude (`m
 | `uv run coach status` | forme du jour et dernières séances dans le terminal |
 | `uv run coach dashboard` | dashboard Streamlit |
 | `uv run coach api [--port 8000]` | API HTTP locale (documentation sur `/docs`) |
+| `uv run coach export-mobile [--out FICHIER]` | archive pour le téléphone : base, fichiers FIT, profil |
+| `uv run coach import-mobile FICHIER` | reprend sur le PC l'archive exportée par le téléphone |
+| `uv run coach login-light` | connexion COROS du téléphone (client léger), testée sur le PC |
 | `uv run pytest` | tests |
 
 Pour essayer sans COROS : `COACH_DATA_DIR=data-demo uv run python scripts/demo_data.py`, puis
@@ -217,9 +227,13 @@ coach/
   metrics/     zones, métriques de séance, répétitions, charge, progression, disponibilité
   verdict.py   type de séance, note et constats
   sync.py      synchronisation et analyse
-  service.py   vues partagées par le dashboard, l'API et le serveur MCP
-  mcp_server.py, api.py, cli.py
+  service.py   vues partagées par le dashboard, l'API, le serveur MCP et le téléphone
+  tools.py     outils de Claude (une liste pour le serveur MCP et l'appli)
+  mobile/      écrans de l'appli Android (blocs appkit), synchro et notifications du téléphone
+  transfer.py  archive PC ↔ téléphone
+  mcp_server.py, api.py, cli.py   réservés au PC
 app/           dashboard Streamlit
+android/       appli Android (voir android/README.md) et kit commun (android/kit/KIT.md)
 dashboard/     ancienne page claude.ai (vue mobile, lit COROS en direct)
 tests/
 ```

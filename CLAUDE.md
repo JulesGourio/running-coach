@@ -69,6 +69,31 @@ Code : les réponses COROS du serveur officiel sont du texte, lu par `coach/sour
 Si COROS change son format, adapte ces fonctions et `tests/test_parsers.py`. Lance `uv run pytest`
 avant de committer.
 
+## Appli Android (téléphone, sans serveur)
+
+`android/` : le moteur `coach/` tourne sur le téléphone avec Chaquopy ; les écrans sont des fonctions Python dans
+`coach/mobile/` qui renvoient des blocs `appkit.ui`, dessinés par la coque Kotlin du kit commun (`android/kit/`,
+guide `android/kit/KIT.md`, skill `appli-android`). Aucun calcul en Kotlin. L'APK est construit par la CI
+(GitHub Actions → Android → artefact). Règles :
+- `coach/` ne doit pas importer `mcp`, Streamlit, plotly ou FastAPI hors des modules réservés au PC
+  (`mcp_server.py`, `api.py`, `cli.py`, `sources/coros_mcp.py`) : `tests/test_portable.py` le vérifie.
+- Le téléphone a pandas 2.1 et numpy 1.26 (job CI `phone-libs`).
+- COROS : `coach.sources.coros.client()` choisit le client `mcp` (PC) ou le client léger httpx (téléphone,
+  `coros_light.py`, connexion en deux temps `login_start` / `login_finish`).
+- Outils de Claude : déclarés une fois avec `@tool` dans `coach/tools.py` (serveur MCP et appli).
+- Nouvel écran : une fonction `@app.screen` dans `coach/mobile/`, testée par `tests/test_mobile.py` qui ouvre
+  tous les écrans atteignables.
+- Données PC → téléphone : `uv run coach export-mobile` puis Réglages → Importer.
+
+## Façon de travailler (Claude Code)
+
+- Agents du projet (`.claude/agents/`) : `explorateur` (Haiku, lecture seule), `codeur` (Sonnet, tâche délimitée,
+  ne committe pas), `relecteur` (Opus, relit le diff avant chaque commit d'une étape).
+- Petite modification : la faire soi-même. Chantier en plusieurs tâches indépendantes : un plan, puis un `codeur`
+  par tâche. Fin d'étape ou changement qui touche le plan COROS, les jetons, la synchro ou la base : `relecteur`.
+- Un hook lance `uv run pytest` avant chaque `git commit` et le bloque si un test échoue ; en session cloud,
+  `.claude/hooks/session-start.sh` installe les dépendances.
+
 ## Page claude.ai (vue mobile)
 
 La page « Carnet de course » (https://claude.ai/artifact/Ceh6AwSUkZkGPjL8kFSdT2, source

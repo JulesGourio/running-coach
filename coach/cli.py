@@ -8,7 +8,8 @@ from pathlib import Path
 
 from coach.config import ROOT, get_settings
 from coach.db import DB
-from coach.sources.coros_mcp import CorosMCP, describe
+from coach.sources import coros
+from coach.sources.coros_base import describe
 
 
 def _db():
@@ -18,7 +19,7 @@ def _db():
 
 async def _probe(interactive: bool) -> None:
     s = get_settings()
-    async with CorosMCP(s, interactive=interactive) as c:
+    async with coros.client(s, interactive=interactive) as c:
         names = await c.tool_names()
     print(f"Connexion COROS officielle OK : {len(names)} outils disponibles.")
     print(", ".join(sorted(names)))
@@ -101,6 +102,59 @@ def cmd_status(_: argparse.Namespace) -> None:
         print(f"{x['date']}  {x['headline'] or x['name']}")
 
 
+def cmd_export_mobile(ns: argparse.Namespace) -> None:
+    from coach.transfer import export_bundle
+    s, _ = _db()
+    out = Path(ns.out).expanduser() if ns.out else Path.home() / "Downloads" / "coach-mobile.zip"
+    r = export_bundle(s, out)
+    print(f"{r['fichier']} : {r['seances']} séances, {r['fit']} fichiers FIT. Copie-le sur le téléphone puis "
+          "Réglages → « Importer des données ».")
+
+
+def cmd_import_mobile(ns: argparse.Namespace) -> None:
+    from coach.transfer import import_bundle
+    s, _ = _db()
+    r = import_bundle(s, Path(ns.file).expanduser())
+    print(f"{r['seances']} séances importées, {r['fit']} fichiers FIT.")
+
+
+def cmd_login_light(_: argparse.Namespace) -> None:
+    """The phone's COROS login (httpx only), tried on the PC: browser + a one-shot local callback server."""
+    import threading
+    import webbrowser
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from coach.sources import coros_light
+    s, _ = _db()
+    got: dict[str, str] = {}
+    done = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            if "code=" in self.path or "error=" in self.path:
+                got["url"] = f"http://127.0.0.1:{s.oauth_port}{self.path}"
+                done.set()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write("<meta charset='utf-8'><p>Connexion COROS terminée.</p>".encode())
+
+        def log_message(self, *a) -> None:
+            pass
+
+    httpd = HTTPServer(("127.0.0.1", s.oauth_port), Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    url = coros_light.login_start(s)
+    print(f"Ouvre cette adresse pour autoriser l'accès à COROS :\n{url}\n")
+    webbrowser.open(url)
+    if not done.wait(300):
+        httpd.shutdown()
+        sys.exit("Délai dépassé.")
+    httpd.shutdown()
+    coros_light.login_finish(s, got["url"])
+    print("Connexion COROS (client léger) OK. Pour l'utiliser sur le PC : COACH_COROS_CLIENT=light.")
+
+
 def cmd_dashboard(_: argparse.Namespace) -> None:
     subprocess.run([sys.executable, "-m", "streamlit", "run", str(ROOT / "app" / "main.py")], check=False)
 
@@ -138,6 +192,13 @@ def main() -> None:
     ap.add_argument("--force", action="store_true")
     ap.set_defaults(fn=cmd_analyze)
     sub.add_parser("status", help="Forme du jour et dernières séances").set_defaults(fn=cmd_status)
+    ep = sub.add_parser("export-mobile", help="Archive pour le téléphone : base, fichiers FIT et profil")
+    ep.add_argument("--out", help="Fichier .zip (par défaut ~/Downloads/coach-mobile.zip)")
+    ep.set_defaults(fn=cmd_export_mobile)
+    mp = sub.add_parser("import-mobile", help="Remplace les données du PC par une archive du téléphone")
+    mp.add_argument("file")
+    mp.set_defaults(fn=cmd_import_mobile)
+    sub.add_parser("login-light", help="Connexion COROS du téléphone (client léger), testée sur le PC").set_defaults(fn=cmd_login_light)
     sub.add_parser("dashboard", help="Lance le dashboard Streamlit").set_defaults(fn=cmd_dashboard)
     api = sub.add_parser("api", help="Lance l'API HTTP locale")
     api.add_argument("--port", type=int, default=8000)

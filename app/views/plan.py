@@ -40,11 +40,12 @@ if _choice != "main":
 
 
 def reload_plan() -> None:
-    from coach.sources.coros_mcp import CorosMCP, NeedsLogin, describe
+    from coach.sources import coros
+    from coach.sources.coros_base import NeedsLogin, describe
     from coach.sync import refresh_plan
 
     async def run():
-        async with CorosMCP(s) as c:
+        async with coros.client(s) as c:
             return await refresh_plan(c, db)
     try:
         with st.spinner("Lecture du plan COROS…"):
@@ -245,7 +246,7 @@ def confirm_push() -> None:
     for ch in changes:
         st.markdown(f"- **{fdate(ch['date'])}** : {pe.describe(ch['after'])}")
     if st.button("Confirmer l'envoi", type="primary", icon=":material/cloud_upload:"):
-        from coach.sources.coros_mcp import NeedsLogin, describe
+        from coach.sources.coros_base import NeedsLogin, describe
         try:
             with st.spinner("Écriture dans COROS…"):
                 res = asyncio.run(pe.push_changes(s, db, changes))

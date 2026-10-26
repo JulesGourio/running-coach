@@ -10,7 +10,7 @@ from pathlib import Path
 
 import httpx
 
-from coach.sources.coros_mcp import CorosError
+from coach.sources.coros_base import CorosError
 
 BASE_URLS = {
     "eu": "https://teameuapi.coros.com",

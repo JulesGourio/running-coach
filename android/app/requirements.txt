@@ -1,0 +1,8 @@
+# The engine's dependencies on the phone: pyproject.toml without the PC-only ones (mcp, streamlit, plotly,
+# fastapi, uvicorn). Chaquopy brings Android builds of numpy and pandas (pandas 2.1, numpy 1.26 for Python 3.13:
+# the CI "phone-libs" job runs the tests with those versions).
+pandas
+numpy
+httpx
+fitdecode
+python-dotenv

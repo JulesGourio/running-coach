@@ -164,7 +164,7 @@ def _confirm_create(db, s, draft: dict) -> None:
         st.warning(f"Il chevauche le plan en cours (jusqu'au {fdate(date.fromisoformat(principal['end']))}) : les deux "
                    "apparaîtront dans le calendrier sur la période commune.")
     if st.button("Confirmer la création", type="primary"):
-        from coach.sources.coros_mcp import describe
+        from coach.sources.coros_base import describe
         try:
             with st.spinner("Création dans COROS…"):
                 msg = asyncio.run(pb.create_in_coros(s, db, draft["id"]))

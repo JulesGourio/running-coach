@@ -357,8 +357,8 @@ def _clean(msg: str, plan_id: str) -> str:
 
 async def push_changes(s: Settings, db: DB, changes: list[dict], client=None) -> dict:
     """Write the changed days to the in-progress COROS plan, then re-read them into the local database.
-    `client` is an already-open CorosMCP (tests pass a fake); by default a connection is opened."""
-    from coach.sources.coros_mcp import CorosMCP
+    `client` is an already-open COROS client (tests pass a fake); by default a connection is opened."""
+    from coach.sources import coros
     from coach.sync import refresh_plan
 
     plan = json.loads(db.get_meta("plan") or "null")
@@ -387,7 +387,7 @@ async def push_changes(s: Settings, db: DB, changes: list[dict], client=None) ->
         if client is not None:
             msg = await run(client)
         else:
-            async with CorosMCP(s) as c:
+            async with coros.client(s) as c:
                 msg = await run(c)
     except Exception as e:  # noqa: BLE001 - record the failure, then surface it
         for ch in changes:
