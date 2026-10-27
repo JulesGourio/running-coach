@@ -71,11 +71,21 @@ def save_profile(values: dict) -> dict[str, str]:
     return cur
 
 
+BOUNDS = {"ATHLETE_HR_MAX": (120, 230), "ATHLETE_HR_REST": (25, 110), "ATHLETE_LTHR": (100, 220),
+          "GOAL_DISTANCE_M": (400, 250000)}
+
+
 def _check(p: dict[str, str]) -> None:
+    import math
     from datetime import date
-    for k in ("ATHLETE_HR_MAX", "ATHLETE_HR_REST", "ATHLETE_LTHR", "GOAL_DISTANCE_M"):
+    for k, (lo, hi) in BOUNDS.items():
         if k in p:
-            float(p[k].replace(",", "."))
+            try:
+                v = float(p[k].replace(",", "."))
+            except ValueError as e:
+                raise ValueError(f"{PROFILE_KEYS[k]} : nombre attendu") from e
+            if not math.isfinite(v) or not lo <= v <= hi:
+                raise ValueError(f"{PROFILE_KEYS[k]} : entre {lo} et {hi}")
     for k in ("GOAL_TIME_A", "GOAL_TIME_B", "ATHLETE_THRESHOLD_PACE"):
         if k in p and parse_clock(p[k]) is None:
             raise ValueError(f"{PROFILE_KEYS[k]} : format attendu 4:05 ou 1:29:00")
@@ -85,6 +95,20 @@ def _check(p: dict[str, str]) -> None:
         raise ValueError("Région COROS : eu, us ou asia")
     if "ATHLETE_SEX" in p and p["ATHLETE_SEX"] not in ("M", "F"):
         raise ValueError("Sexe : M ou F")
+
+
+def valid_profile(values: dict) -> tuple[dict[str, str], list[str]]:
+    """The keys of `values` that pass the checks one by one, and the rejected ones."""
+    ok, bad = {}, []
+    for k, v in values.items():
+        if k not in PROFILE_KEYS or v in (None, ""):
+            continue
+        try:
+            _check({k: str(v).strip()})
+            ok[k] = str(v).strip()
+        except ValueError:
+            bad.append(k)
+    return ok, bad
 
 
 def parse_clock(v: str) -> float | None:

@@ -1,4 +1,5 @@
 """The engine must run on the phone, where the PC-only libraries are absent (no mcp, Streamlit, plotly, FastAPI)."""
+import os
 import subprocess
 import sys
 import textwrap
@@ -28,6 +29,7 @@ def test_engine_imports_without_pc_libraries():
         assert coros.kind() == "light", coros.kind()
         print(len(names))
     """)
-    env = {"PYTHONPATH": f"{ROOT}:{ROOT / 'android' / 'kit' / 'python'}", "PATH": "/usr/bin:/bin"}
+    env = {k: v for k, v in os.environ.items() if k != "COACH_COROS_CLIENT"}
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT), str(ROOT / "android" / "kit" / "python")])
     r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr

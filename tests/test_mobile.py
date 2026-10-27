@@ -271,9 +271,64 @@ def test_plan_push_goes_through_the_coros_client(phone, monkeypatch):
         async def __aexit__(self, *a):
             return False
     monkeypatch.setattr(coros, "client", lambda s, interactive=False: Ctx())
-    r = _action("plan_envoyer")
+    assert not json.loads(bridge.action("plan_envoyer", json.dumps({"empreinte": "autre"})))["ok"]
+    r = _action("plan_envoyer", empreinte=_send_button()["args"]["empreinte"])
     assert "mis à jour" in r["message"]
     assert fake.calls and fake.calls[0][0] == "updateTrainingPlan"
+
+
+def _send_button():
+    def find(blocks):
+        for b in blocks:
+            if b.get("action") == "plan_envoyer":
+                return b
+            found = find(b.get("blocks", []) + b.get("items", []))
+            if found:
+                return found
+        return None
+    return find(_screen("plan")["blocks"])
+
+
+def test_send_leaves_out_days_that_changed_or_passed(phone, monkeypatch):
+    from coach.config import get_settings
+    from coach.db import DB
+    from coach.mobile import plan_screens as ps
+    db = DB(get_settings().db_path)
+    day = _future_day()
+    _action("plan_jour_ajuster", jour=day["date"], volume="90")
+    pending = ps.pending_get(db)
+    past = (date.today() - timedelta(days=1)).isoformat()
+    pending[past] = {**pending[day["date"]], "date": past}
+    pending[day["date"]]["before"] = [{"courseName": "autre chose"}]  # changed elsewhere since it was queued
+    ps.pending_save(db, pending)
+    r = _action("plan_envoyer", empreinte=ps.fingerprint(pending))
+    assert "Non envoyés" in r["message"] and "modifié ailleurs" in r["message"] and "passé" in r["message"]
+    assert ps.pending_get(db) == {}
+
+
+def test_a_new_plan_drops_the_queue(phone):
+    from coach.config import get_settings
+    from coach.db import DB
+    from coach.mobile import plan_screens as ps
+    db = DB(get_settings().db_path)
+    _action("plan_jour_ajuster", jour=_future_day()["date"], volume="90")
+    assert ps.pending_get(db)
+    plan = json.loads(db.get_meta("plan"))
+    db.set_meta("plan", json.dumps({**plan, "id": "autre-plan"}))
+    try:
+        assert ps.pending_get(db) == {}
+    finally:
+        db.set_meta("plan", json.dumps(plan))
+        _action("plan_annuler_tout")
+
+
+def test_notified_keys_are_pruned_by_kind():
+    from coach.mobile import prune_notified
+    today = date(2026, 10, 27)
+    sent = {f"seance|x{i:04d}" for i in range(400)} | {"2026-10-27|Alerte", "2026-10-01|Vieille", "bilan|2026-10-19"}
+    kept = prune_notified(sent, today)
+    assert "2026-10-27|Alerte" in kept and "2026-10-01|Vieille" not in kept and "bilan|2026-10-19" in kept
+    assert sum(k.startswith("seance|") for k in kept) == 300
 
 
 def test_draft_generator_and_library(phone):

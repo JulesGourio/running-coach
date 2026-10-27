@@ -137,6 +137,9 @@ def setup_logging(data_dir: Path) -> None:
         h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
         root.addHandler(h)
         root.setLevel(logging.INFO)
+        # request URLs (signed download links, tokens in query strings) stay out of the logs
+        for name in ("httpx", "httpcore", "urllib3"):
+            logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def load(module: str) -> App:

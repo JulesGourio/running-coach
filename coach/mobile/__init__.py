@@ -102,7 +102,16 @@ def notify_news(s: Settings, db: DB, before: set[str]) -> None:
         if key not in sent:
             notify.send("Bilan de la semaine", "\n".join(r["summary"][:3] + r["proposals"][:1]), 3)
             sent.add(key)
-    db.set_meta("mobile_notified", json.dumps(sorted(sent)[-300:]))
+    db.set_meta("mobile_notified", json.dumps(prune_notified(sent)))
+
+
+def prune_notified(sent: set[str], today: date | None = None) -> list[str]:
+    """Daily alert keys for the last 7 days, the last 300 sessions and 60 weekly reports."""
+    cutoff = ((today or date.today()) - timedelta(days=7)).isoformat()
+    days = sorted(k for k in sent if k[:4].isdigit() and k[:10] >= cutoff)
+    sessions = sorted(k for k in sent if k.startswith("seance|"))[-300:]
+    reports = sorted(k for k in sent if k.startswith("bilan|"))[-60:]
+    return days + sessions + reports
 
 
 @app.on_sync

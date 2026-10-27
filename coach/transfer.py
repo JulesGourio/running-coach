@@ -114,6 +114,8 @@ def import_bundle(s: Settings, path: Path) -> dict:
             new_db = tmp / "coach.sqlite"
             shutil.copyfile(path, new_db)
         n_acts = check_database(new_db)
+        # the profile is checked before anything is replaced: a bad value is skipped, never an error afterwards
+        prof_ok, prof_bad = config.valid_profile(profile or {})
 
         for name in fit_names:
             shutil.move(str(tmp / "fit" / name), str(s.fit_dir / name))
@@ -139,10 +141,12 @@ def import_bundle(s: Settings, path: Path) -> dict:
         for side in ("-wal", "-shm"):
             Path(str(s.db_path) + side).unlink(missing_ok=True)
 
-    applied = {}
-    if profile:
-        current = config.profile()
-        applied = {k: v for k, v in profile.items() if k in config.PROFILE_KEYS and k not in current}
-        if applied:
+    current = config.profile()
+    applied = {k: v for k, v in prof_ok.items() if k not in current}
+    if applied:
+        try:
             config.save_profile(applied)
-    return {"seances": n_acts, "fit": kept, "fit_absents": len(rows) - kept, "profil": sorted(applied)}
+        except ValueError:
+            applied = {}
+    return {"seances": n_acts, "fit": kept, "fit_absents": len(rows) - kept, "profil": sorted(applied),
+            "profil_ignore": sorted(prof_bad)}

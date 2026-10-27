@@ -123,6 +123,8 @@ def donnees_importer(path: str, name: str = ""):
     msg = f"{r['seances']} séances importées, {r['fit']} fichiers FIT."
     if r["fit_absents"]:
         msg += f" {r['fit_absents']} fichiers manquants seront retéléchargés."
+    if r.get("profil_ignore"):
+        msg += f" Réglages ignorés (valeur invalide) : {', '.join(r['profil_ignore'])}."
     return msg
 
 

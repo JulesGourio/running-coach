@@ -39,7 +39,7 @@ def test_bundle_keeps_fit_files_and_rewrites_their_paths(s, tmp_path):
         z.writestr("../evil.txt", "x")
         z.writestr("fit/../../evil.fit", "x")
     r = transfer.import_bundle(s, bundle)
-    assert r == {"seances": 1, "fit": 1, "fit_absents": 0, "profil": ["GOAL_LABEL"]}
+    assert r == {"seances": 1, "fit": 1, "fit_absents": 0, "profil": ["GOAL_LABEL"], "profil_ignore": []}
     assert DB(s.db_path).activity("a1")["fit_path"] == str(s.fit_dir / "a1.fit")
     assert not (tmp_path / "evil.txt").exists() and not (s.data_dir / "evil.txt").exists()
     assert not list(tmp_path.rglob("evil*"))
@@ -79,3 +79,13 @@ def test_export_contains_the_profile_from_the_environment(s, tmp_path, monkeypat
     with zipfile.ZipFile(out) as z:
         assert '"Marathon"' in z.read("profil.json").decode()
         assert "coach.sqlite" in z.namelist()
+
+
+def test_bad_profile_values_are_skipped_not_fatal(s, tmp_path):
+    _source_db(tmp_path / "coach.sqlite")
+    bundle = tmp_path / "b.zip"
+    with zipfile.ZipFile(bundle, "w") as z:
+        z.write(tmp_path / "coach.sqlite", "coach.sqlite")
+        z.writestr("profil.json", '{"ATHLETE_SEX": "m", "GOAL_LABEL": "Semi", "GOAL_DISTANCE_M": "0"}')
+    r = transfer.import_bundle(s, bundle)
+    assert r["profil"] == ["GOAL_LABEL"] and r["profil_ignore"] == ["ATHLETE_SEX", "GOAL_DISTANCE_M"]

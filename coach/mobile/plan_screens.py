@@ -15,12 +15,28 @@ from coach.mobile import app, ctx, fmt
 # ---- pending changes, kept in the database between screens ----------------------------------------------------
 
 
+def _plan_id(db) -> str | None:
+    return (json.loads(db.get_meta("plan") or "null") or {}).get("id")
+
+
 def pending_get(db) -> dict:
-    return json.loads(db.get_meta("mobile_pending_plan") or "{}")
+    """The queued changes (by date), only for the plan they were made on: a change of plan drops them,
+    since their day numbers would point at other days."""
+    d = json.loads(db.get_meta("mobile_pending_plan") or "{}")
+    if not d.get("changes") or d.get("plan_id") != _plan_id(db):
+        return {}
+    return d["changes"]
 
 
 def pending_save(db, pending: dict) -> None:
-    db.set_meta("mobile_pending_plan", json.dumps(pending))
+    db.set_meta("mobile_pending_plan", json.dumps({"plan_id": _plan_id(db), "changes": pending}))
+
+
+def fingerprint(pending: dict) -> str:
+    """What the confirmation showed: sending refuses if the queue changed since."""
+    import hashlib
+    items = sorted((c["date"], json.dumps(c["after"], sort_keys=True)) for c in pending.values())
+    return hashlib.sha1(json.dumps(items).encode()).hexdigest()[:16]
 
 
 def queue(db, changes: list[dict]) -> int:
@@ -97,7 +113,7 @@ def _main_plan(head: dict, semaine: int | None):
         blocks.append(ui.card(f"Modifications en attente ({len(changes)})",
                               ui.table(["Jour", "Avant", "Après", "Raison"],
                                        [[fmt.day(c["date"]), pe.describe(c["before"]), pe.describe(c["after"]), c["reason"]] for c in changes]),
-                              ui.buttons(ui.button("Envoyer sur COROS", "plan_envoyer", icon="upload",
+                              ui.buttons(ui.button("Envoyer sur COROS", "plan_envoyer", {"empreinte": fingerprint(pending)}, icon="upload",
                                                    confirm=f"{len(changes)} jour(s) vont être réécrits dans ton plan COROS (et sur ta montre) :\n"
                                                            + "\n".join(f"• {fmt.day(c['date'])} : {pe.describe(c['after'])}" for c in changes)
                                                            + "\nLes jours déjà réalisés ne sont jamais modifiés."),
@@ -205,14 +221,33 @@ def plan_recharger():
 
 
 @app.action("plan_envoyer")
-def plan_envoyer():
+def plan_envoyer(empreinte: str = ""):
+    """Send what the confirmation listed, after checking each day against the plan as stored now: a day that
+    became past or done, or that changed since it was queued (Claude, the PC, COROS), is left out."""
     s, db = ctx()
-    changes = sorted(pending_get(db).values(), key=lambda c: c["date"])
-    res = asyncio.run(pe.push_changes(s, db, changes))
+    pending = pending_get(db)
+    if not pending:
+        raise ValueError("Aucune modification en attente (le plan a peut-être changé) : recharge l'écran.")
+    if empreinte != fingerprint(pending):
+        raise ValueError("Les modifications en attente ont changé depuis l'affichage : vérifie-les puis renvoie.")
+    send, dropped = [], []
+    for ch in sorted(pending.values(), key=lambda c: c["date"]):
+        day = next(iter(db.plan_days(ch["date"], ch["date"])), None)
+        if not editable(day):
+            dropped.append(f"{fmt.day(ch['date'])} (passé ou réalisé)")
+        elif pe.day_courses(day) != ch["before"]:
+            dropped.append(f"{fmt.day(ch['date'])} (modifié ailleurs entre-temps)")
+        else:
+            send.append({**ch, "day_no": day["day_no"]})
+    msg = ""
+    if send:
+        res = asyncio.run(pe.push_changes(s, db, send))
+        msg = f"Plan mis à jour dans COROS : {len(res['applied'])} jour(s) modifié(s)."
+        if res["skipped"]:
+            msg += f" {len(res['skipped'])} jour(s) déjà réalisé(s) laissé(s) tel(s) quel(s)."
     pending_save(db, {})
-    msg = f"Plan mis à jour dans COROS : {len(res['applied'])} jour(s) modifié(s)."
-    if res["skipped"]:
-        msg += f" {len(res['skipped'])} jour(s) déjà réalisé(s) laissé(s) tel(s) quel(s)."
+    if dropped:
+        msg += (" " if msg else "") + "Non envoyés : " + ", ".join(dropped) + "."
     return msg
 
 

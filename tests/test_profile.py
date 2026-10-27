@@ -18,7 +18,8 @@ def test_profile_fills_what_the_environment_leaves_empty(tmp_path, monkeypatch):
     assert config.Settings().hr_max is None
 
 
-@pytest.mark.parametrize("bad", [{"GOAL_TIME_A": "vite"}, {"GOAL_DATE": "13/12"}, {"COROS_REGION": "mars"}, {"X": "1"}])
+@pytest.mark.parametrize("bad", [{"GOAL_TIME_A": "vite"}, {"GOAL_DATE": "13/12"}, {"COROS_REGION": "mars"}, {"X": "1"},
+                                 {"ATHLETE_HR_MAX": "nan"}, {"ATHLETE_HR_MAX": "400"}, {"GOAL_DISTANCE_M": "0"}])
 def test_profile_rejects_bad_values(tmp_path, monkeypatch, bad):
     monkeypatch.setenv("COACH_DATA_DIR", str(tmp_path))
     with pytest.raises(ValueError):

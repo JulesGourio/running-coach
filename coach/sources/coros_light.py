@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import secrets
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,11 @@ ACCEPT = "application/json, text/event-stream"
 
 def redirect_uri(s: Settings) -> str:
     return f"http://127.0.0.1:{s.oauth_port}/callback"
+
+
+# The background sync and a screen action run in the same process: one refresh and one file write at a time.
+_lock = threading.RLock()  # file writes
+_refresh_lock = threading.Lock()  # token refresh (a plain Lock: taken in a worker thread, released here)
 
 
 class LightStore:
@@ -55,10 +61,11 @@ class LightStore:
         tmp.replace(self.path)
 
     def update(self, **parts: Any) -> dict:
-        d = self.load()
-        d.update(parts)
-        self.save(d)
-        return d
+        with _lock:
+            d = self.load()
+            d.update(parts)
+            self.save(d)
+            return d
 
     def has_tokens(self) -> bool:
         return bool(self.load().get("tokens", {}).get("access_token"))
@@ -147,14 +154,16 @@ def login_start(s: Settings, http: httpx.Client | None = None) -> str:
     with (http or httpx.Client(timeout=30, follow_redirects=True)) as h:
         meta = discover(h, s.coros_mcp_url)
         client = st.load().get("client") or {}
-        if not client.get("client_id") or redirect not in client.get("redirect_uris", []):
+        # a registration belongs to one server: a new region (or address) registers again
+        if (not client.get("client_id") or redirect not in client.get("redirect_uris", [])
+                or client.get("server") != s.coros_mcp_url):
             r = h.post(meta["registration_endpoint"], json={
                 "client_name": CLIENT_NAME, "redirect_uris": [redirect],
                 "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"],
                 "token_endpoint_auth_method": "none", **({"scope": meta["scope"]} if meta["scope"] else {})})
             if r.status_code >= 400:
                 raise CorosError(f"COROS refuse l'enregistrement de l'appli ({r.status_code}) : {r.text[:200]}")
-            client = r.json()
+            client = {**r.json(), "server": s.coros_mcp_url}
     verifier = _b64(secrets.token_bytes(48))
     state = _b64(secrets.token_bytes(24))
     challenge = _b64(hashlib.sha256(verifier.encode()).digest())
@@ -237,14 +246,19 @@ class CorosLight(CorosTools):
         if not self.st.has_tokens():
             raise NeedsLogin("Pas encore connecté à COROS : connecte-toi dans Réglages.")
         self.http = self._http or httpx.AsyncClient(timeout=90, follow_redirects=True)
-        d = self.st.load()
-        exp = (d.get("tokens") or {}).get("expires_at")
-        if exp and exp < time.time() + 60:
-            await self._refresh()
-        init = await self._rpc("initialize", {"protocolVersion": PROTOCOL_VERSION, "capabilities": {},
-                                              "clientInfo": {"name": CLIENT_NAME, "version": "1"}})
-        self.protocol = (init or {}).get("protocolVersion", PROTOCOL_VERSION)
-        await self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        try:
+            d = self.st.load()
+            exp = (d.get("tokens") or {}).get("expires_at")
+            if exp and exp < time.time() + 60:
+                await self._refresh()
+            init = await self._rpc("initialize", {"protocolVersion": PROTOCOL_VERSION, "capabilities": {},
+                                                  "clientInfo": {"name": CLIENT_NAME, "version": "1"}})
+            self.protocol = (init or {}).get("protocolVersion", PROTOCOL_VERSION)
+            await self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        except BaseException:
+            if self._http is None:
+                await self.http.aclose()
+            raise
         return self
 
     async def __aexit__(self, *exc: Any) -> None:
@@ -256,8 +270,11 @@ class CorosLight(CorosTools):
         if self.http and self._http is None:
             await self.http.aclose()
 
+    _sent_token: str | None = None
+
     def _headers(self) -> dict:
         tok = (self.st.load().get("tokens") or {}).get("access_token")
+        self._sent_token = tok
         h = {"Accept": ACCEPT, "Content-Type": "application/json", "Authorization": f"Bearer {tok}",
              "MCP-Protocol-Version": getattr(self, "protocol", PROTOCOL_VERSION)}
         if self.session_id:
@@ -265,16 +282,26 @@ class CorosLight(CorosTools):
         return h
 
     async def _refresh(self) -> None:
-        d = self.st.load()
-        tok, client, meta = d.get("tokens") or {}, d.get("client") or {}, d.get("meta") or {}
-        if not tok.get("refresh_token") or not meta.get("token_endpoint"):
-            raise NeedsLogin("La connexion COROS a expiré : reconnecte-toi dans Réglages.")
-        r = await self.http.post(meta["token_endpoint"], data={
-            "grant_type": "refresh_token", "refresh_token": tok["refresh_token"], "client_id": client.get("client_id"),
-            "resource": meta.get("resource")})
-        if r.status_code >= 400:
-            raise NeedsLogin("La connexion COROS a expiré : reconnecte-toi dans Réglages.")
-        _save_tokens(self.st, r.json(), tok)
+        """Refresh the access token, one caller at a time; a caller that waited reuses the new token."""
+        import asyncio
+        used = self._sent_token
+        await asyncio.to_thread(_refresh_lock.acquire)
+        try:
+            d = self.st.load()
+            tok, client, meta = d.get("tokens") or {}, d.get("client") or {}, d.get("meta") or {}
+            fresh = not tok.get("expires_at") or tok["expires_at"] > time.time() + 60
+            if used and tok.get("access_token") and tok["access_token"] != used and fresh:
+                return  # another caller refreshed meanwhile (refresh tokens are single use)
+            if not tok.get("refresh_token") or not meta.get("token_endpoint"):
+                raise NeedsLogin("La connexion COROS a expiré : reconnecte-toi dans Réglages.")
+            r = await self.http.post(meta["token_endpoint"], data={
+                "grant_type": "refresh_token", "refresh_token": tok["refresh_token"], "client_id": client.get("client_id"),
+                "resource": meta.get("resource")})
+            if r.status_code >= 400:
+                raise NeedsLogin("La connexion COROS a expiré : reconnecte-toi dans Réglages.")
+            _save_tokens(self.st, r.json(), tok)
+        finally:
+            _refresh_lock.release()
 
     async def _post(self, msg: dict, retry: bool = True) -> httpx.Response:
         r = await self.http.post(self.s.coros_mcp_url, json=msg, headers=self._headers())

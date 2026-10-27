@@ -171,3 +171,30 @@ def test_factory_prefers_the_library_but_can_be_forced(monkeypatch, s):
     assert coros.connected(s) is False
     _logged_in(s)
     assert coros.connected(s) is True
+
+
+def test_a_new_region_registers_again(s):
+    with respx.mock(assert_all_called=False) as router:
+        reg = _oauth_routes(router)
+        cl.login_start(s)
+        assert cl.store(s).load()["client"]["server"] == MCP
+        s.coros_mcp_url = MCP + "?region=us"
+        router.post(s.coros_mcp_url).mock(return_value=httpx.Response(401))
+        router.get(url__startswith="https://mcpeu.coros.com/.well-known/oauth-protected-resource").mock(
+            return_value=httpx.Response(200, json={"resource": MCP, "authorization_servers": [AUTH]}))
+        cl.login_start(s)
+    assert reg.call_count == 2
+
+
+def test_two_sessions_refresh_once(s):
+    """The sync and a screen action find the token expired together: one refresh, both calls succeed."""
+    _logged_in(s)
+    cl.store(s).update(tokens={"access_token": "t-old", "refresh_token": "r1", "expires_at": None})
+
+    async def both():
+        return await asyncio.gather(_call(s), _call(s))
+    with respx.mock(assert_all_called=False) as router:
+        _mcp_server(router)
+        refresh = router.post(f"{AUTH}/oauth/token").mock(return_value=httpx.Response(200, json={"access_token": "t2", "expires_in": 3600}))
+        assert asyncio.run(both()) == ["Sport Records\n1. Run"] * 2
+    assert refresh.call_count == 1
