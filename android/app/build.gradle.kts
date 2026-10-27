@@ -82,6 +82,8 @@ val copyEngine by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("python-src/coach"))
 }
 tasks.named("preBuild") { dependsOn(copyEngine) }
+// Chaquopy's merge tasks read the copied engine: declare it so Gradle orders them.
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("PythonSources") }.configureEach { dependsOn(copyEngine) }
 
 chaquopy {
     defaultConfig {
