@@ -206,7 +206,7 @@ def to_coros(draft: dict) -> dict:
 
 
 async def create_in_coros(s, db: DB, draft_id: str, client=None) -> str:
-    from coach.sources.coros_mcp import CorosMCP
+    from coach.sources import coros
     d = next(x for x in drafts(db) if x["id"] == draft_id)
     today = date.today()
     start = date.fromisoformat(d["plan"]["start"])
@@ -220,7 +220,7 @@ async def create_in_coros(s, db: DB, draft_id: str, client=None) -> str:
     async def run(c):
         await c.call("queryTrainingPlanLibrary", {"statusList": [0, 1]})
         return await c.call("createTrainingPlan", args)
-    msg = await run(client) if client is not None else await _with(CorosMCP(s), run)
+    msg = await run(client) if client is not None else await _with(coros.client(s), run)
     items = drafts(db)
     for x in items:
         if x["id"] == draft_id:

@@ -25,7 +25,7 @@ period = c1.segmented_control("Période", ["30 jours", "3 mois", "6 mois", "1 an
 if c2.button("Tout l'historique COROS", icon=":material/history:", width="stretch",
              help="Récupère les séances (résumés) et les nuits depuis l'ouverture du compte. Les fichiers FIT détaillés "
                   "arrivent ensuite au fil des synchronisations (COROS limite leur nombre par jour)."):
-    from coach.sources.coros_mcp import describe
+    from coach.sources.coros_base import describe
     from coach.sync import sync_history
     try:
         with st.spinner("Récupération de l'historique COROS…"):

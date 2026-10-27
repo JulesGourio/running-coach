@@ -14,7 +14,8 @@ from coach.db import DB
 from coach.fit import read_fit
 from coach.metrics.session import compute_session_metrics
 from coach.service import athlete
-from coach.sources.coros_mcp import CorosError, CorosMCP
+from coach.sources import coros
+from coach.sources.coros_base import CorosError, CorosTools
 from coach.sources.coros_web import CorosWeb
 from coach.verdict import judge
 
@@ -30,7 +31,7 @@ async def sync_mcp(s: Settings, db: DB, days: int = 30, max_fit: int = 15, inter
     today = date.today()
     start = today - timedelta(days=days)
     stats = {"activities": 0, "fit": 0, "fit_errors": 0}
-    async with CorosMCP(s, interactive=interactive) as c:
+    async with coros.client(s, interactive=interactive) as c:
         for a in await c.sport_records(ymd(start), ymd(today), all_sports=True):
             db.upsert_activity({**a, "source": "coros"})
             stats["activities"] += 1
@@ -56,7 +57,7 @@ async def sync_mcp(s: Settings, db: DB, days: int = 30, max_fit: int = 15, inter
     return stats
 
 
-async def fetch_sleep(c: CorosMCP, db: DB, start: date, end: date) -> int:
+async def fetch_sleep(c: CorosTools, db: DB, start: date, end: date) -> int:
     """Nightly sleep detail (phases, naps, bed/wake times), in 30-day windows."""
     n, a = 0, start
     while a <= end:
@@ -74,7 +75,7 @@ async def sync_history(s: Settings, db: DB, days: int = 365, log: Log = print) -
     today = date.today()
     start = today - timedelta(days=days)
     n_act = 0
-    async with CorosMCP(s) as c:
+    async with coros.client(s) as c:
         a = start
         while a <= today:
             b = min(a + timedelta(days=59), today)  # 60-day windows: COROS returns at most 200 records per call
@@ -88,7 +89,7 @@ async def sync_history(s: Settings, db: DB, days: int = 365, log: Log = print) -
     return {"activities": n_act, "sleep": n_sleep}
 
 
-async def refresh_plan(c: CorosMCP, db: DB, start: date | None = None, end: date | None = None) -> dict | None:
+async def refresh_plan(c: CorosTools, db: DB, start: date | None = None, end: date | None = None) -> dict | None:
     """Store the in-progress plan (the whole plan by default) locally, in 28-day windows (the COROS maximum)."""
     plan = await c.plan()
     if not plan:

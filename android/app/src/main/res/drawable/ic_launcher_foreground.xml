@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A runner's track: a rising line ending on a finish flag, inside the 66dp safe zone of the 108dp icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M30,72 C40,72 42,58 50,58 C58,58 58,46 66,44" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M68,30h3v36h-3z" />
+    <path android:fillColor="#FFFF8A65" android:pathData="M71,30h12l-3,5 3,5h-12z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M28,76h52v3h-52z" />
+</vector>
